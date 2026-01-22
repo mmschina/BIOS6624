@@ -1,8 +1,9 @@
 # BIOS 6624 - Advanced Statistical Methods &amp; Analysis
 
-Instructor: Dr. Camille Moore
-TA: Ella Hagopian
-Student: Madelynn Schina
+Instructor: Dr. Camille Moore            
+TA: Ella Hagopian             
+Student: Madelynn Schina (madelynn.schina@cuanschutz.edu)
+
 
 This repository contains all materials pertaining to course projects for BIOS 6624. 
 Each project has an individual folder, each folder formatted in the same manner. Please refer to the table below for the contents of each project folder.
