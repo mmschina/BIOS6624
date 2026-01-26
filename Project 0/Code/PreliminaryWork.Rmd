@@ -1,0 +1,82 @@
+---
+title: "Project 0 - Preliminary Work"
+author: "Madelynn Schina"
+date: "January 2026"
+output: pdf_document
+---
+
+
+```{r, include=F}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(here)
+library(dplyr)
+library(ggplot2)
+
+```
+
+
+
+```{r, echo = F}
+# Loading dataset
+horomone_data <- read.csv(here("Project 0/Data", "Project0_Clean_v2.csv"))
+
+```
+
+
+```{r, echo = F}
+# Glancing at missingness of variables of interest
+horomone_data %>%
+  summarise(across(c(Booket..Clock.Time, MEMs..Clock.Time, Cortisol..ug.dl., DHEA..pg.dl.),
+                   ~ sum(is.na(.)),
+                   .names = "n_missing_{.col}"))
+
+```
+
+
+```{r, echo = F}
+# Preliminary graphs to ascertain any patterns
+# Graphing cortisol measurements overtime for each individuals
+ggplot(horomone_data, 
+       aes(x = interaction(Collection.Date, Collection.Sample),
+               y = Cortisol..ug.dl.,
+               group = SubjectID,
+               color = SubjectID)) +
+  geom_line(alpha = 0.6) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  labs(
+    x = "Day / Measurement",
+    y = "Cortisol Level",
+    title = "Spaghetti Plot of Individual Trajectories"
+  ) +
+  theme(legend.position = "none")
+
+
+# Graphing DHEA measurements overtime for each individual
+ggplot(horomone_data, 
+       aes(x = interaction(Collection.Date, Collection.Sample),
+           y = DHEA..pg.dl.,
+           group = SubjectID,
+           color = SubjectID)) +
+  geom_line(alpha = 0.6) +
+  geom_point(alpha = 0.6) +
+  theme_minimal() +
+  labs(x = "Day / Measurement",
+       y = "DHEA",
+       title = "Spaghetti Plot of Individual Trajectories") +
+  theme(legend.position = "none")
+
+
+```
+
+
+
+Potential Questions for the Investigator:
+\begin{itemize}
+  \item What is the potential range of a typical cortisol and DHEA reading? Did your reading devices produce an error code? (9999.000 for cortisol?)
+  \begin{itemize}
+    \item Want to be certain when trying to rule out outliers in the case of incorrect measurements by study participants. Was the reading abnormally high and thus should be considered or was it an error and should be handled to not skew results.
+  \end{itemize}
+\end{itemize}
