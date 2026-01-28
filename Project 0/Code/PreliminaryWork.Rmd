@@ -80,3 +80,29 @@ Potential Questions for the Investigator:
     \item Want to be certain when trying to rule out outliers in the case of incorrect measurements by study participants. Was the reading abnormally high and thus should be considered or was it an error and should be handled to not skew results.
   \end{itemize}
 \end{itemize}
+
+
+
+
+
+Notes from Class:
+- missing was likely due to unable to read if missing but time was recorded
+- interested in time since they woke up, not between spit measurements
+- missing data for cap time due to user error
+- question 1: scatter plot of the two times against each other, looking for strong correlation/association (ignore missingness) (want a test, also talk about bias)
+- 9999 is an error code for missing for cortisol (5 observations)
+- question 3: interested in wake-up to last measurement, want expected trends (cortisol should spike and then gradually decline; DHEA should ) What is the increase from wake-up to 30? And then do we see the decline?
+- use nmol/L measures for cortisol and DHEA, not the original measures
+- question 2: descriptive statistics should be enough; time intervals of interest (adherence window): good adherence - within 7.5 minutes, adequate adherence - within 15 minutes, poor adherence - beyond 15.
+- In the nmol units: cortisol range: over 26 is unlikely (don't necessarily remove), over 80 is incorrect (lab error); DHEA range: 5.205 is upper limit of machine, that is also likely an error
+
+
+
+Question 1 - Mixed Random Effects Model (Don't average across days); descriptive statistics on the difference between the two times (histogram) (ignore when cap time is missing, give rates)
+Question 2 - Use booklet time, average difference across the three days to categorize adherence for the individual. One analysis with cut off being 7.5, another analysis with cut off being 15
+Question 3 - Piecewise LMM with knot at 30 minutes
+
+
+Ignore Clock Time Intervals at all costs, not sure they are calculated right!!!!
+
+
