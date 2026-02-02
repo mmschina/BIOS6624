@@ -94,7 +94,7 @@ Notes from Class:
 - question 3: interested in wake-up to last measurement, want expected trends (cortisol should spike and then gradually decline; DHEA should ) What is the increase from wake-up to 30? And then do we see the decline?
 - use nmol/L measures for cortisol and DHEA, not the original measures
 - question 2: descriptive statistics should be enough; time intervals of interest (adherence window): good adherence - within 7.5 minutes, adequate adherence - within 15 minutes, poor adherence - beyond 15.
-- In the nmol units: cortisol range: over 26 is unlikely (don't necessarily remove), over 80 is incorrect (lab error); DHEA range: 5.205 is upper limit of machine, that is also likely an error
+- In the nmol units: cortisol range: over 26 is unlikely (don't necessarily remove), over 80 is incorrect (lab error); DHEA range: 5.205 is upper limit of machine (maximum level of detection), that is also likely an error
 
 
 
