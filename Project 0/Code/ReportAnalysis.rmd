@@ -22,7 +22,7 @@ library(gtsummary)
 
 ```{r, echo = F}
 # Loading dataset
-horomone_data <- read.csv(here("Project 0/Data", "Project0_Clean_v2.csv"))
+hormone_data <- read.csv(here("Project 0/Data", "Project0_Clean_v2.csv"))
 
 ```
 
@@ -31,30 +31,31 @@ horomone_data <- read.csv(here("Project 0/Data", "Project0_Clean_v2.csv"))
 ```{r, echo = F}
 ## Data Cleaning
 # Removing any observations with recorded cortisol levels above 80 (biological impossible and thus a lab error)
-removed_count_cort <- horomone_data %>%
+removed_count_cort <- hormone_data %>%
   filter(Cortisol..nmol.L. >= 80) %>%
   nrow()
 
-horomone_data_clean <- horomone_data %>%
+hormone_data_clean <- hormone_data %>%
   filter(Cortisol..nmol.L. < 80)
 
 # One observation found with a cortisol measurement over 80
 # Five observations missing cortisol measurements, error code present
 
 # Removing any observations with recorded DHEA of 5.205, limitation of instrument
-removed_count_dhea <- horomone_data_clean %>%
+removed_count_dhea <- hormone_data_clean %>%
   filter(DHEA..nmol.L. == 5.205) %>%
   nrow()
 
-horomone_data_clean <- horomone_data_clean %>%
+hormone_data_clean <- hormone_data_clean %>%
   filter(DHEA..nmol.L. != 5.205)
 
 # Six observations with a DHEA measurement of 5.205
 
 
-# 12 observations removed due to measurement criteria
+# 12 observations total removed due to measurement criteria
 
 ```
+
 
 
 
@@ -65,14 +66,16 @@ Question: What is the agreement between the subject’s recordings of sampling t
 ```{r, echo = F}
 ## Handling missing data and variable formatting to answer question 1
 # Removing any observations missing booklet or cap times
-removed_count_time <- horomone_data_clean %>%
+removed_count_time <- hormone_data_clean %>%
   filter(if_any(all_of(c("Booket..Clock.Time", "MEMs..Clock.Time")), ~ . == "")) %>%
   nrow()
 
-data_clean_one <- horomone_data_clean %>%
+data_clean_one <- hormone_data_clean %>%
   filter(if_all(all_of(c("Booket..Clock.Time", "MEMs..Clock.Time")), ~ . != ""))
 
 # 83 observations missing either or both times
+
+
 
 # Ensuring all necessary times are treated correctly
 # Converting them into minutes for the sake of future calculations
@@ -93,9 +96,32 @@ data_clean_one <- data_clean_one %>%
 ```{r, echo = F}
 # Fitting LMM Model with random intercept for subjects
 time_lmm <- lmer(cap_time_min ~ booklet_time_min + (1 | SubjectID), data = data_clean_one)
-summary(time_lmm)
+
+# Creating summary table of model results for question 1
+tbl_regression(time_lmm,
+               conf.level = 0.95,
+               intercept = TRUE,
+               label = list(`(Intercept)` ~ "Intercept",
+                            booklet_time_min ~ "Slope"),
+               estimate_fun = ~style_number(.x, digits = 2))
 
 ```
+
+
+```{r, echo = F}
+# Diagnostic plots of model for question 1
+# Residuals vs Fitted
+plot(fitted(time_lmm), resid(time_lmm))
+abline(h = 0, col = "red")
+
+# Q-Q plot of residuals
+qqnorm(resid(time_lmm))
+qqline(resid(time_lmm), col = "red")
+
+
+```
+
+
 
 
 ```{r, echo = F, warning = F, message = F}
@@ -106,22 +132,20 @@ ggplot(data_clean_one, aes(x = diff_min)) +
   labs(x = "Time Difference (minutes)",
        y = "Count")
 
-# Scatterplot of cap time vs. booklet time, includes line with a slope of one
-ggplot(data_clean_one, aes(x = booklet_time_min, y = cap_time_min)) +
-  geom_point(alpha = 0.6, color = "darkorchid2") +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
-  labs(x = "Booklet Time (minutes)", y = "Cap Time (minutes)")
-
 # Scatterplot of time points, includes a dashed line with a slope of one and a solid line for the regression model
+data_clean_one$fitted <- predict(time_lmm)
+
 ggplot(data_clean_one, aes(x = booklet_time_min, y = cap_time_min)) +
-  geom_point(alpha = 0.3, color = "seagreen") +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "darkorchid2", linewidth = 1.2) +
-  geom_smooth(method = "lm", se = FALSE, color = "cornflowerblue", linewidth = 0.8) +
-  labs(
-    x = "Booklet Time (minutes)",
-    y = "Cap Time (minutes)",
-    title = "Agreement of Time Measurements"
-  )
+  geom_point(alpha = 0.3, aes(color = "Data Points")) +
+  geom_abline(data = data.frame(x = 0, y = 0), aes(intercept = 0, slope = 1, color = "Ideal Fit"),
+              linetype = "dashed", linewidth = 1.2) +
+  geom_line(aes(y = fitted, color = "LMM Fit"), linewidth = 1.2) +
+  scale_color_manual(name = "Legend", values = c("Data Points" = "seagreen",
+                                                 "Ideal Fit" = "darkorchid2",
+                                                 "LMM Fit" = "cornflowerblue")) +
+  labs(x = "Booklet Time (minutes)",
+       y = "Cap Time (minutes)",
+       title = "Analysis of Agreement of Time Measurements")
 
 ```
 
@@ -142,7 +166,7 @@ Are subjects adhering accurately to the +30min and +10 hour sampling times requi
 ```{r, echo = F, message = F, warning = F}
 # Adding wake-up time to each observation of a given day for each individual patient
 # Converting wake-up time into minutes
-adherence_data <- horomone_data_clean %>%
+adherence_data <- hormone_data_clean %>%
   group_by(SubjectID, Collection.Date) %>%
   mutate(Sleep.Diary.reported.wake.time = Sleep.Diary.reported.wake.time[1]) %>%
   filter(trimws(Sleep.Diary.reported.wake.time) != "") %>%
@@ -151,44 +175,41 @@ adherence_data <- horomone_data_clean %>%
   ungroup()
 
 
-# Subsetting data to focus on just samples 2 and 4 & Calculating target times from wake up
+# Calculating target times from wake up for samples 2 and 4
 adherence_data <- adherence_data %>%
-  filter(Collection.Sample %in% c(2, 4)) %>%
   mutate(target_time = case_when(Collection.Sample == 2 ~ wake_min + 30,
                                  Collection.Sample == 4 ~ wake_min + 600))
 
 
-# Handling missing times to exclude the least amount of observations possible
-# Default is booklet time. If it is missing, will use cap time. If both missing, observation will be removed from analysis
+# Removing any observations missing booklet time and converting it into minutes
 adherence_data <- adherence_data %>%
-  mutate(Booket..Clock.Time = na_if(Booket..Clock.Time, ""),
-         MEMs..Clock.Time   = na_if(MEMs..Clock.Time, "")) %>%
-  mutate(sample_time = coalesce(Booket..Clock.Time, MEMs..Clock.Time)) %>%
-  filter(!is.na(sample_time))
-
-# Converting sample_time into minutes for the sake of future calculations
-adherence_data <- adherence_data %>%
-  separate(sample_time, into = c("h3", "m3"), sep = ":", convert = TRUE) %>%
-  mutate(sample_time_min = h3 * 60 + m3)
+  mutate(Booket..Clock.Time = na_if(Booket..Clock.Time, "")) %>%
+  filter(!is.na(Booket..Clock.Time)) %>%
+  separate(Booket..Clock.Time, into = c("h3", "m3"), sep = ":", convert = TRUE) %>%
+  mutate(booklet_time_min = h3 * 60 + m3)
 
 
 # Classifying adherence based on time difference
 adherence_data <- adherence_data %>%
-  mutate(diff_min = abs(sample_time_min - target_time),
+  mutate(diff_min = abs(booklet_time_min - target_time),
          adherence_label = case_when(diff_min <= 7.5 ~ "Good",
                                      diff_min <= 15 & diff_min > 7.5 ~ "Adequate",
                                      diff_min > 15 ~ "Poor")) %>%
   mutate(adherence_label = factor(adherence_label, levels = c("Good", "Adequate", "Poor")))
 
-# Creating table of adherence results by sampling times
+
+# Creating table of adherence results by sampling times, only interested in samples 2 and 4
 adherence_table <- adherence_data %>%
+    filter(Collection.Sample %in% c(2, 4)) %>%
   select(adherence_label, Collection.Sample) %>%
   tbl_summary(by = Collection.Sample,
-              percent = "row",
-              label = list(adherence_label ~ "Adherence Classification")) %>%
+              label = list(adherence_label ~ "Adherence Classification"),
+              digits = list(all_categorical() ~ 0)) %>%
   modify_header(label ~ "",
-                update = c("stat_1" ~ "+30 min Sample (N={n})",
-                           "stat_2" ~ "+10 hour Sample (N={n})"))
+                update = c("stat_1" ~ "30-Minute Sample<br>(N={n})",
+                           "stat_2" ~ "600-Minute Sample<br>(N={n})"))
+
+adherence_table
 
 ```
 
@@ -201,7 +222,7 @@ What are the changes of cortisol and DHEA over time?
 
 
 ```{r, echo = F}
-# Diagnostic plots to see if transformations are required
+# Diagnostic plots to see if transformations are required of outcomes
 # Histogram of cortisol levels
 ggplot(adherence_data, aes(x = Cortisol..nmol.L.)) +
   geom_histogram(bins = 30, fill = "cornflowerblue", color = "black") +
@@ -216,18 +237,18 @@ ggplot(adherence_data, aes(x = DHEA..nmol.L.)) +
 
 # Histograms suggest that both variables should be log transformed
 # Log transforming both variables
-adherence_data <- adherence_data %>%
+time_data <- adherence_data %>%
   mutate(log_cort = log(Cortisol..nmol.L.),
          log_dhea = log(DHEA..nmol.L.))
 
 # Histogram of transformed cortisol levels
-ggplot(adherence_data, aes(x = log_cort)) +
+ggplot(time_data, aes(x = log_cort)) +
   geom_histogram(bins = 30, fill = "cornflowerblue", color = "black") +
   labs(x = "Cortisol Levels (nmol/L)",
        y = "Count")
 
 # Histogram of transformed DHEA
-ggplot(adherence_data, aes(x = log_dhea)) +
+ggplot(time_data, aes(x = log_dhea)) +
   geom_histogram(bins = 30, fill = "seagreen", color = "black") +
   labs(x = "DHEA (nmol/L)",
        y = "Count")
@@ -236,40 +257,141 @@ ggplot(adherence_data, aes(x = log_dhea)) +
 
 
 ```{r, echo = F}
-# Creating knot at 30 minutes
-adherence_data <- adherence_data %>%
-  mutate(timeknot = ifelse(sample_time_min <= (wake_min + 30), 0, sample_time_min - (wake_min + 30)))
+# Getting time from wake-up to make interpretability of models easier
+time_data <- time_data %>%
+  mutate(time_since_wake = booklet_time_min - wake_min)
 
-# Fitting piecewise linear model for cortisol levels
-cort_model <- lmer(log_cort ~ sample_time_min + timeknot + (1 | SubjectID),
-                          data = adherence_data)
+# Creating variables for before and after 30 minutes to create knot to reflect patten we expect to see in the data
+time_data <- time_data %>%
+  mutate(pre_knot = ifelse(time_since_wake < 30, time_since_wake, 30),
+         post_knot = ifelse(time_since_wake >= 30, time_since_wake - 30, 0))
 
-# Fitting piecewise linear model for DHEA
-dhea_model <- lmer(log_dhea ~ sample_time_min + timeknot + (1 | SubjectID),
-                          data = adherence_data)
 
-summary(cort_model)
-summary(dhea_model)
+
+# Fitting piecewise lmm for cortisol levels
+cort_model <- lmer(log_cort ~ pre_knot + post_knot + (1 | SubjectID),
+                          data = time_data)
+
+# Diagnostic plots for cortisol model
+plot(fitted(cort_model), resid(cort_model))
+abline(h = 0, col = "red")
+
+qqnorm(resid(cort_model))
+qqline(resid(cort_model), col = "red")
+
+
+# Fitting piecewise lmm for DHEA
+dhea_model <- lmer(log_dhea ~ pre_knot + post_knot + (1 | SubjectID),
+                          data = time_data)
+
+# Diagnostic plots for DHEA model
+plot(fitted(dhea_model), resid(dhea_model))
+abline(h = 0, col = "red")
+
+qqnorm(resid(dhea_model))
+qqline(resid(dhea_model), col = "red")
+
+```
+
+
+```{r, echo = F}
+# Organizing results for question 3 models
+# Results of cortisol model
+tbl_cort <- tbl_regression(cort_model,
+               conf.level = 0.95,
+               intercept = TRUE,
+               label = list(`(Intercept)` ~ "Intercept",
+                            pre_knot ~ "Waking to 30 minutes",
+                            post_knot ~ "After 30 minutes"),
+               estimate_fun = ~style_number(.x, digits = 4))
+
+# Results of DHEA model
+tbl_dhea <- tbl_regression(dhea_model,
+               conf.level = 0.95,
+               intercept = TRUE,
+               label = list(`(Intercept)` ~ "Intercept",
+                            pre_knot ~ "Waking to 30 minutes",
+                            post_knot ~ "After 30 minutes"),
+               estimate_fun = ~style_number(.x, digits = 5))
+
+# Combining model results into nice table
+tbl_combined <- tbl_merge(
+  tbls = list(tbl_cort, tbl_dhea),
+  tab_spanner = c("**Cortisol Model**", "**DHEA Model**")
+)
+
+tbl_combined
 
 
 ```
 
 
 ```{r, echo = F}
-## Plots
+## Plots for Question 3
+# Getting predictions from fitted models
+time_data <- time_data %>%
+  mutate(fitted_cort = predict(cort_model, re.form = NA),
+         fitted_dhea = predict(dhea_model, re.form = NA))
+
 # Scatterplot for cortisol levels
+ggplot(time_data, aes(x = time_since_wake)) +
+  geom_point(aes(y = Cortisol..nmol.L., col = 'Observed'), alpha = 0.4) +
+  geom_line(aes(y = exp(fitted_cort), col = 'Predicted'), linewidth = 1) +
+  scale_color_manual(name = "Legend",
+                     values = c("Observed" = "black", "Predicted" = "darkolivegreen3")) +
+  theme_bw() +
+  labs(x = "Time Since Waking (Minutes)",
+       y = "Cortisol (nmol/L)",
+       title = "Estimated Mean of Cortisol Over Time") +
+  theme(legend.position = 'bottom')
 
-
-
-# Scatterplot for DHEA
-
-
+# Scatterplot for DHEA levels
+ggplot(time_data, aes(x = time_since_wake)) +
+  geom_point(aes(y = DHEA..nmol.L., col = 'Observed'), alpha = 0.4) +
+  geom_line(aes(y = exp(fitted_dhea), col = 'Predicted'), linewidth = 1) +
+  scale_color_manual(name = "Legend",
+                     values = c("Observed" = "black", "Predicted" = "darkcyan")) +
+  theme_bw() +
+  labs(x = "Time Since Waking (Minutes)",
+       y = "DHEA (nmol/L)",
+       title = "Estimated Mean of DHEA Over Time") +
+  theme(legend.position = 'bottom')
 
 ```
 
 
 
+# Additional Plots & Tables for Report
 
+```{r, echo = F}
+# Table1 Summary for results section of final report
+summary_data <- hormone_data_clean %>%
+  separate(Booket..Clock.Time, into = c("h1", "m1"), sep = ":", convert = TRUE) %>% # booklet time
+  separate(MEMs..Clock.Time, into = c("h2", "m2"), sep = ":", convert = TRUE) %>% # cap times
+  mutate(booklet_time_min = h1 * 60 + m1,
+         cap_time_min = h2 * 60 + m2) %>%
+  select(Collection.Sample, Cortisol..nmol.L., DHEA..nmol.L., booklet_time_min, cap_time_min)
+
+# Renaming Collection.Sample for table
+summary_data <- summary_data %>%
+  mutate(Collection.Sample = factor(Collection.Sample,
+                                    levels = c(1, 2, 3, 4),
+                                    labels = c("Wake", "+30 min", "Lunch", "+600 min")))
+
+tbl_summary(summary_data,
+            by = Collection.Sample,
+            missing = "ifany",
+            statistic = all_continuous() ~ "{mean} ({sd})",
+            label = list(Cortisol..nmol.L. ~ "Cortisol (nmol/L)",
+                         DHEA..nmol.L. ~ "DHEA (nmol/L)",
+                         booklet_time_min ~ "Booklet Time (min)",
+                         cap_time_min ~ "Cap Time (min)")) %>%
+  add_overall() %>%
+  modify_table_body(~ .x %>%
+                      dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label)))
+
+
+```
 
 
 
