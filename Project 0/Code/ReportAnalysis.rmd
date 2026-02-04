@@ -145,7 +145,7 @@ ggplot(data_clean_one, aes(x = booklet_time_min, y = cap_time_min)) +
                                                  "LMM Fit" = "cornflowerblue")) +
   labs(x = "Booklet Time (minutes)",
        y = "Cap Time (minutes)",
-       title = "Analysis of Agreement of Time Measurements")
+       title = "Cap Time vs. Booklet Time")
 
 ```
 
