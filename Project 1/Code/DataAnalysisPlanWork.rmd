@@ -14,6 +14,7 @@ library(here)
 library(dplyr)
 library(ggplot2)
 library(gtsummary)
+library(gt)
 library(moments)
 
 ```
@@ -105,15 +106,25 @@ summary_data <- summary_data %>%
                                    "Current smoker")))
 
 # Creating summary table
-tbl_summary(summary_data,
-            by = years,
-            missing = "ifany",
-            statistic = all_continuous() ~ "{mean} ({sd})",
-            label = list(VLOAD ~ "Viral Load (copies/mL)",
-                         LEU3N ~ "CD4+ T Cell Count (# of cells)")) %>%
+descriptive_table <- tbl_summary(summary_data,
+                                 by = years,
+                                 missing = "ifany",
+                                 statistic = all_continuous() ~ "{mean} ({sd})",
+                                 label = list(VLOAD ~ "Viral Load (copies/mL)",
+                                              LEU3N ~ "CD4+ T Cell Count (# of cells)",
+                                              AGG_PHYS ~ "Physical QOL Score",
+                                              AGG_MENT ~ "Mental Health QOL Score",
+                                              hard_drugs_baseline ~ "Hard Drug Use Prior to Treatment",
+                                              ADH ~ "Adherence",
+                                              RACE ~ "Race",
+                                              EDUCBAS ~ "Highest Education Reached",
+                                              SMOKE ~ "Smoking Status")) %>%
   add_overall() %>%
   modify_table_body(~ .x %>%
                       dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label)))
+
+# Save table as image for report
+gtsave(as_gt(descriptive_table), "descriptivetable.png")
 
 ```
 
