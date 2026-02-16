@@ -51,13 +51,32 @@ hiv_data_cleaned <- hiv_data %>%
 ```
 
 
+```{r, echo = F}
+# Checking that age increases by exactly 2 years for everyone
+age_check <- hiv_data_cleaned %>%
+  group_by(newid) %>%
+  summarise(
+    age_baseline = age[years == 0],
+    age_year2 = age[years == 2],
+    age_difference = age_year2 - age_baseline,
+    .groups = 'drop'
+  )
+
+problems <- age_check %>%
+  filter(age_difference != 2)
+
+# No subject aged as we didn't expect, so we can use baseline_age without time variation
+
+```
+
 
 ```{r, echo = F}
 # Note that we are only interested in hard_drugs indicator at baseline and not during the study
-# Creating hard_drugs_baseline variable for each patient
+# Creating hard_drugs_baseline variable and baseline_age variable for each patient
 hiv_data_cleaned <- hiv_data_cleaned %>%
   group_by(newid) %>%
   mutate(hard_drugs_baseline = hard_drugs[years == 0]) %>%
+  mutate(baseline_age = age[years == 0]) %>%
   ungroup()
 
 ```
@@ -67,7 +86,7 @@ hiv_data_cleaned <- hiv_data_cleaned %>%
 # Descriptive Statistics of variables of interest in the dataset
 summary_data <- hiv_data_cleaned %>%
   filter(years == 0) %>%
-  select(VLOAD, LEU3N, AGG_PHYS, AGG_MENT, hard_drugs_baseline, BMI, RACE, EDUCBAS, SMOKE)
+  select(VLOAD, LEU3N, AGG_PHYS, AGG_MENT, hard_drugs_baseline, baseline_age, BMI, RACE, EDUCBAS, SMOKE)
 
 # Renaming ADH, RACE, EDUCBAS, and SMOKE for table
 summary_data <- summary_data %>%
@@ -110,7 +129,8 @@ descriptive_table <- tbl_summary(summary_data,
                                               AGG_MENT ~ "Mental Health QOL Score",
                                               RACE ~ "Race",
                                               EDUCBAS ~ "Highest Education Reached",
-                                              SMOKE ~ "Smoking Status")) %>%
+                                              SMOKE ~ "Smoking Status",
+                                              baseline_age ~ "Age (years)")) %>%
   add_overall() %>%
   modify_table_body(~ .x %>%
                       dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label)))
