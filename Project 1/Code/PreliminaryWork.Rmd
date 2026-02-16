@@ -1,12 +1,12 @@
 ---
-title: "Project 0 - Preliminary Work"
+title: "Project 1 - Preliminary Work"
 author: "Madelynn Schina"
-date: "January 2026"
+date: "February 2026"
 output: pdf_document
 ---
 
 
-```{r, include=F}
+```{r, include=F} 
 knitr::opts_chunk$set(echo = TRUE)
 
 library(knitr)
@@ -38,11 +38,18 @@ Adjusting Covariates: age, race, bmi
 
 
 Questions for the PI:
-- When you say you are interested in treatment response, are you only interested in you laboratory measures or quality of life measures as well?
-- Any limitations on values of viral load or t-cell count? Anything biologically implausible or a limitation of the assay?
-- Do men smoking and/or drinking react differently to treatment? Should these covariates be accounted for?
-- Do you want to adjust for kidney and liver disease as they impact the immune system?
-- Am I correct that syphilis, herpes and gonorrhea can all exacerbate HIV symptoms? Saw these indicators in the dictionary but not the dataset, do you not want them adjusted for?
+- When you say you are interested in treatment response, are you only interested in you laboratory measures or quality of life measures as well? - interested in all four outcomes of interest mentioned
+- Any limitations on values of viral load or t-cell count? Anything biologically implausible or a limitation of the assay? - 
+- Do men smoking and/or drinking react differently to treatment? Should these covariates be accounted for? Do you want to adjust for kidney and liver disease as they impact the immune system? -- Yes, No, No, No
+- Am I correct that syphilis, herpes and gonorrhea can all exacerbate HIV symptoms? Saw these indicators in the dictionary but not the dataset, do you not want them adjusted for? -- No
+
+
+- hard_drugs at baseline, nothing after
+- adherence, race, educ (not income tied together)
+- consider collapsing race
+- could hard_drug explain difference in adherence (overarching question)
+- refuse to answer should be considered as missing
+- vif to test multicolinarity of years and age
 
 
 
@@ -55,7 +62,7 @@ hiv_data %>%
 
 
 hiv_data %>%
-  filter(years %in% c(0, 2)) %>%
+  filter(years %in% c(0, 1, 2)) %>%
   select(hard_drugs, ADH, RACE, age, BMI, AGG_MENT, AGG_PHYS) %>%
   tbl_summary(statistic = list(all_continuous() ~ "{mean} ({sd})",
                                all_categorical() ~ "{n} ({p}%)"),
@@ -67,6 +74,12 @@ hiv_data %>%
 
 
 ```{r, echo = F}
+# Histogram of Viral Load
+ggplot(hiv_data, aes(x = VLOAD)) +
+  geom_histogram(fill = "cornflowerblue", color = "black") +
+  labs(x = "Viral Load",
+       y = "Count")
+
 # Histogram of T-Cell Count
 ggplot(hiv_data, aes(x = LEU3N)) +
   geom_histogram(fill = "cornflowerblue", color = "black", binwidth = 50) +
@@ -84,19 +97,14 @@ ggplot(hiv_data, aes(x = AGG_PHYS)) +
   labs(x = "QOL Mental",
        y = "QOL Physical")
 
-
-
-
 ```
 
 
 
 Personal Notes:
 - Focused on baseline and 2-year visit
-
-
-Notes from Discussion w/PI:
-- 
+- Remember to mention the type of prior used in your report (listed in slide deck), should also mention assumptions made (also in slide deck)
+- Either center biological data or move center (biological data typically doesn't have an intercept of 0, implausible)
 
 
 
