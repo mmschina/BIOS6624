@@ -14,6 +14,7 @@ library(here)
 library(dplyr)
 library(ggplot2)
 library(gtsummary)
+library(moments)
 
 ```
 
@@ -116,6 +117,63 @@ tbl_summary(summary_data,
 
 ```
 
+
+
+Evaluating outcomes of interest to determine if transformations are necessary
+
+```{r, echo = F}
+## Initial plots of distributions
+# Histogram of Viral Load
+ggplot(hiv_data, aes(x = VLOAD)) +
+  geom_histogram(fill = "cornflowerblue", color = "black") +
+  labs(x = "Viral Load",
+       y = "Count")
+
+# Histogram of T-Cell Count
+ggplot(hiv_data, aes(x = LEU3N)) +
+  geom_histogram(fill = "cornflowerblue", color = "black", binwidth = 50) +
+  labs(x = "T-Cell Count",
+       y = "Count")
+
+# Histogram of QOL Mental Score
+ggplot(hiv_data, aes(x = AGG_MENT)) +
+  geom_histogram(fill = "cornflowerblue", color = "black") +
+  labs(x = "QOL Mental",
+       y = "Count")
+
+# Histogram of QOL Physical Score
+ggplot(hiv_data, aes(x = AGG_PHYS)) +
+  geom_histogram(fill = "cornflowerblue", color = "black") +
+  labs(x = "QOL Mental",
+       y = "QOL Physical")
+
+
+# Testing skewness using the moment package
+skewness(hiv_data$VLOAD, na.rm = TRUE)
+skewness(hiv_data$LEU3N, na.rm = TRUE)
+skewness(hiv_data$AGG_MENT, na.rm = TRUE)
+skewness(hiv_data$AGG_PHYS, na.rm = TRUE)
+
+```
+
+
+Appears that log transforming Viral Load may be appropriate. Other three variables look ok without transformations, residual plots of final models will be assessed to confirm this.
+
+
+```{r, echo = F}
+# Assessing if log transforming Viral Load is appropriate
+ggplot(hiv_data, aes(x = log(VLOAD))) +
+  geom_histogram(fill = "cornflowerblue", color = "black") +
+  labs(x = "Viral Load",
+       y = "Count")
+
+# Log transforming Viral Load in the dataset
+hiv_data <- hiv_data %>%
+  mutate(log_vload = log(VLOAD + 1))
+
+
+
+```
 
 
 
