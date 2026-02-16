@@ -40,29 +40,22 @@ Covariates Adjusting for:  ADH, RACE, EDUCBAS, SMOKE
 # Since we are only interested in response 2 years after starting treatment, all visits/years after 2 can be excluded
 # Subsetting dataset to only baseline, year 1 and year 2.
 hiv_data <- hiv_data %>%
-  filter(years <= 2)
+  filter(years %in% c(0,2))
+
+# Removing any individuals missing either baseline or visit at year 2 
+hiv_data_cleaned <- hiv_data %>%
+  group_by(newid) %>%
+  filter(n() == 2) %>%
+  ungroup() 
 
 ```
 
-```{r, echo = F}
-# Creating table of patients counts for each of the three visits to observe missingness
-missingness_by_visit <- hiv_data %>%
-  group_by(years) %>%
-  summarise(n_patients = n())
-
-print(missingness_by_visit)
-```
-
-
-715 unique individuals in the study, we have a baseline visit for each of them.
-190 of those patients are missing a visit at year 1
-An additional 19, totally 209 of the total, are missing a visit at year 2
 
 
 ```{r, echo = F}
 # Note that we are only interested in hard_drugs indicator at baseline and not during the study
 # Creating hard_drugs_baseline variable for each patient
-hiv_data <- hiv_data %>%
+hiv_data_cleaned <- hiv_data_cleaned %>%
   group_by(newid) %>%
   mutate(hard_drugs_baseline = hard_drugs[years == 0]) %>%
   ungroup()
@@ -72,15 +65,13 @@ hiv_data <- hiv_data %>%
 
 ```{r, echo = F}
 # Descriptive Statistics of variables of interest in the dataset
-summary_data <- hiv_data %>%
-  select(years, VLOAD, LEU3N, AGG_PHYS, AGG_MENT, hard_drugs_baseline, ADH, RACE, EDUCBAS, SMOKE)
+summary_data <- hiv_data_cleaned %>%
+  filter(years == 0) %>%
+  select(VLOAD, LEU3N, AGG_PHYS, AGG_MENT, hard_drugs_baseline, BMI, RACE, EDUCBAS, SMOKE)
 
 # Renaming ADH, RACE, EDUCBAS, and SMOKE for table
 summary_data <- summary_data %>%
-  mutate(ADH = factor(ADH,
-                      levels = c(1, 2, 3, 4),
-                      labels = c("100%", "95-99%", "75-94%", "<75%")),
-         RACE = factor(RACE,
+  mutate(RACE = factor(RACE,
                        levels = c(1, 2, 3, 4, 5, 6, 7, 8),
                        labels = c("White, Non-Hispanic",
                                   "White, Hispanic",
@@ -103,19 +94,20 @@ summary_data <- summary_data %>%
                         levels = c(1, 2, 3),
                         labels = c("Never smoked",
                                    "Former smoker",
-                                   "Current smoker")))
+                                   "Current smoker")),
+         hard_drugs_baseline = factor(hard_drugs_baseline,
+                                      levels = c(0,1),
+                                      labels = c("No Hard Drug Use", "Hard Drug Use")))
 
 # Creating summary table
 descriptive_table <- tbl_summary(summary_data,
-                                 by = years,
+                                 by = hard_drugs_baseline,
                                  missing = "ifany",
                                  statistic = all_continuous() ~ "{mean} ({sd})",
                                  label = list(VLOAD ~ "Viral Load (copies/mL)",
                                               LEU3N ~ "CD4+ T Cell Count (# of cells)",
                                               AGG_PHYS ~ "Physical QOL Score",
                                               AGG_MENT ~ "Mental Health QOL Score",
-                                              hard_drugs_baseline ~ "Hard Drug Use Prior to Treatment",
-                                              ADH ~ "Adherence",
                                               RACE ~ "Race",
                                               EDUCBAS ~ "Highest Education Reached",
                                               SMOKE ~ "Smoking Status")) %>%
@@ -135,35 +127,35 @@ Evaluating outcomes of interest to determine if transformations are necessary
 ```{r, echo = F}
 ## Initial plots of distributions
 # Histogram of Viral Load
-ggplot(hiv_data, aes(x = VLOAD)) +
+ggplot(hiv_data_cleaned, aes(x = VLOAD)) +
   geom_histogram(fill = "cornflowerblue", color = "black") +
   labs(x = "Viral Load",
        y = "Count")
 
 # Histogram of T-Cell Count
-ggplot(hiv_data, aes(x = LEU3N)) +
+ggplot(hiv_data_cleaned, aes(x = LEU3N)) +
   geom_histogram(fill = "cornflowerblue", color = "black", binwidth = 50) +
   labs(x = "T-Cell Count",
        y = "Count")
 
 # Histogram of QOL Mental Score
-ggplot(hiv_data, aes(x = AGG_MENT)) +
+ggplot(hiv_data_cleaned, aes(x = AGG_MENT)) +
   geom_histogram(fill = "cornflowerblue", color = "black") +
   labs(x = "QOL Mental",
        y = "Count")
 
 # Histogram of QOL Physical Score
-ggplot(hiv_data, aes(x = AGG_PHYS)) +
+ggplot(hiv_data_cleaned, aes(x = AGG_PHYS)) +
   geom_histogram(fill = "cornflowerblue", color = "black") +
   labs(x = "QOL Mental",
        y = "QOL Physical")
 
 
 # Testing skewness using the moment package
-skewness(hiv_data$VLOAD, na.rm = TRUE)
-skewness(hiv_data$LEU3N, na.rm = TRUE)
-skewness(hiv_data$AGG_MENT, na.rm = TRUE)
-skewness(hiv_data$AGG_PHYS, na.rm = TRUE)
+skewness(hiv_data_cleaned$VLOAD, na.rm = TRUE)
+skewness(hiv_data_cleaned$LEU3N, na.rm = TRUE)
+skewness(hiv_data_cleaned$AGG_MENT, na.rm = TRUE)
+skewness(hiv_data_cleaned$AGG_PHYS, na.rm = TRUE)
 
 ```
 
@@ -173,16 +165,14 @@ Appears that log transforming Viral Load may be appropriate. Other three variabl
 
 ```{r, echo = F}
 # Assessing if log transforming Viral Load is appropriate
-ggplot(hiv_data, aes(x = log(VLOAD))) +
+ggplot(hiv_data_cleaned, aes(x = log(VLOAD))) +
   geom_histogram(fill = "cornflowerblue", color = "black") +
   labs(x = "Viral Load",
        y = "Count")
 
 # Log transforming Viral Load in the dataset
-hiv_data <- hiv_data %>%
-  mutate(log_vload = log(VLOAD + 1))
-
-
+hiv_data_cleaned <- hiv_data_cleaned %>%
+  mutate(log_vload = log(VLOAD))
 
 ```
 
