@@ -1,0 +1,122 @@
+---
+title: "Project 1 - Data Analysis Plan"
+author: "Madelynn Schina"
+date: "February 2026"
+output: pdf_document
+---
+
+
+```{r, include=F} 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(here)
+library(dplyr)
+library(ggplot2)
+library(gtsummary)
+
+```
+
+
+```{r, echo = F}
+# Loading dataset
+hiv_data <- read.csv(here("Project 1/Data", "hiv_6624_final.csv"))
+
+```
+
+
+Questions of Interest: How treatment response 2 years after initiating HAART differs between subjects who report using hard drugs, such as heroin and cocaine, at baseline and other subjects, who did not report hard drug use at baseline.
+Overarching Question: Could hard_drug explain difference in adherence?
+
+
+Variables of Interest:  VLOAD, LEU3N, AGG_PHYS, AGG_MENT
+Primary Predictor:  hard_drugs at baseline
+Covariates Adjusting for:  ADH, RACE, EDUCBAS, SMOKE
+
+
+```{r, echo = F}
+# Since we are only interested in response 2 years after starting treatment, all visits/years after 2 can be excluded
+# Subsetting dataset to only baseline, year 1 and year 2.
+hiv_data <- hiv_data %>%
+  filter(years <= 2)
+
+```
+
+```{r, echo = F}
+# Creating table of patients counts for each of the three visits to observe missingness
+missingness_by_visit <- hiv_data %>%
+  group_by(years) %>%
+  summarise(n_patients = n())
+
+print(missingness_by_visit)
+```
+
+
+715 unique individuals in the study, we have a baseline visit for each of them.
+190 of those patients are missing a visit at year 1
+An additional 19, totally 209 of the total, are missing a visit at year 2
+
+
+```{r, echo = F}
+# Note that we are only interested in hard_drugs indicator at baseline and not during the study
+# Creating hard_drugs_baseline variable for each patient
+hiv_data <- hiv_data %>%
+  group_by(newid) %>%
+  mutate(hard_drugs_baseline = hard_drugs[years == 0]) %>%
+  ungroup()
+
+```
+
+
+```{r, echo = F}
+# Descriptive Statistics of variables of interest in the dataset
+summary_data <- hiv_data %>%
+  select(years, VLOAD, LEU3N, AGG_PHYS, AGG_MENT, hard_drugs_baseline, ADH, RACE, EDUCBAS, SMOKE)
+
+# Renaming ADH, RACE, EDUCBAS, and SMOKE for table
+summary_data <- summary_data %>%
+  mutate(ADH = factor(ADH,
+                      levels = c(1, 2, 3, 4),
+                      labels = c("100%", "95-99%", "75-94%", "<75%")),
+         RACE = factor(RACE,
+                       levels = c(1, 2, 3, 4, 5, 6, 7, 8),
+                       labels = c("White, Non-Hispanic",
+                                  "White, Hispanic",
+                                  "Black, Non-Hispanic",
+                                  "Black, Hispanic",
+                                  "American Indian or Alaskan Native",
+                                  "Asian or Pacific Islander",
+                                  "Other",
+                                  "Other Hispanic")),
+         EDUCBAS = factor(EDUCBAS,
+                          levels = c(1, 2, 3, 4, 5, 6, 7),
+                          labels = c("8th grade or less",
+                                     "9, 10, or 11th grade",
+                                     "12th grade",
+                                     "At least one year college but no degree",
+                                     "Four years college / got degree",
+                                     "Some graduate work",
+                                     "Post-graduate degree")),
+         SMOKE = factor(SMOKE,
+                        levels = c(1, 2, 3),
+                        labels = c("Never smoked",
+                                   "Former smoker",
+                                   "Current smoker")))
+
+# Creating summary table
+tbl_summary(summary_data,
+            by = years,
+            missing = "ifany",
+            statistic = all_continuous() ~ "{mean} ({sd})",
+            label = list(VLOAD ~ "Viral Load (copies/mL)",
+                         LEU3N ~ "CD4+ T Cell Count (# of cells)")) %>%
+  add_overall() %>%
+  modify_table_body(~ .x %>%
+                      dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label)))
+
+```
+
+
+
+
+
