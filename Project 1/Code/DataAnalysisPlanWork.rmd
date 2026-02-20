@@ -38,7 +38,7 @@ Covariates Adjusting for:  ADH, RACE, EDUCBAS, SMOKE
 
 ```{r, echo = F}
 # Since we are only interested in response 2 years after starting treatment, all visits/years after 2 can be excluded
-# Subsetting dataset to only baseline, year 1 and year 2.
+# Subsetting dataset to only baseline and year 2.
 hiv_data <- hiv_data %>%
   filter(years %in% c(0,2))
 
