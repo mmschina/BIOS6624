@@ -25,17 +25,17 @@ hiv_data_cleaned <- hiv_data %>%
 # Handling implausible values
 # Excluding participants with BMIs less than 6.7 or greater than 250
 hiv_data_cleaned <- hiv_data_cleaned %>%
-  filter(bmi >= 6.7 & bmi <= 250)
+  filter(BMI >= 6.7 & BMI <= 250)
 
 
-# Removing any participants missing either baseline or year 2 visits 
+# Removing any participants missing either baseline or year 2 visits after applying exclusion criteria
 hiv_data_cleaned <- hiv_data_cleaned %>%
   group_by(newid) %>%
   filter(n() == 2) %>%
   ungroup() 
 
 
-# Log10 transforming Viral Load
+# Log10 transforming Viral Load to address skewness
 hiv_data_cleaned <- hiv_data_cleaned %>%
   mutate(log_vload = log10(VLOAD))
 
@@ -68,15 +68,22 @@ hiv_data_org <- hiv_data_cleaned %>%
 
 # Collapsing race and education categories
 # Might need to more 4 for education, clarify collapse criteria (At least one year college but no degree)
-hiv_data_org <- hiv_data_or %>%
-  mutate(education_B = case_when(education_B %in% c(1,2,3) ~ "High School",
-                                 education_B %in% c(4,5,6,7) ~ "College Experience or Better"),
+hiv_data_org <- hiv_data_org %>%
+  mutate(education_B = case_when(education_B %in% c(1,2,3) ~ "Did Not Go to College",
+                                 education_B %in% c(4,5,6,7) ~ "Went to College"),
          race_B = case_when(race_B %in% c(2,3,4,7,8) ~ "Other",
-                            race_B == 1 ~ "White, Non-Hispanic"))
+                            race_B == 1 ~ "White, Non-Hispanic"),
+         smoking_B = case_when(smoking_B == 1 ~ "Never Smoked",
+                               smoking_B %in% c(2,3) ~ "Smoked"))
+
+
+# Turning "Do Not Wish to Answer" into NA for income
+hiv_data_org <- hiv_data_org %>%
+  mutate(income_B = na_if(income_B, 9))
 
 
 
 # Creating csv file of clean data set for analysis
-# write.csv(hiv_data_org, "hiv_data_cleaned.csv", row.names = FALSE)
+write.csv(hiv_data_org, here("Project 1/Data", "hiv_data_cleaned.csv"), row.names = FALSE)
 
 
