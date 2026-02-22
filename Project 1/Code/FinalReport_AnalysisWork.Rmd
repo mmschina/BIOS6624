@@ -1,0 +1,443 @@
+---
+title: "Project 1 Final Report - Analysis Work"
+author: "Madelynn Schina"
+date: "March 2026"
+output: pdf_document
+---
+
+
+```{r, include=F} 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(here)
+library(dplyr)
+library(gtsummary)
+library(cmdstanr)
+library(bayesplot)
+library(posterior)
+library(bayestestR)
+library(mcmcse)
+library(loo)
+library(tibble)
+
+```
+
+
+```{r}
+# Loading dataset
+hiv_data <- read.csv(here("Project 1/Data", "hiv_data_cleaned.csv"))
+
+```
+
+
+```{r}
+# Data Management
+# Complete Case Analysis
+hiv_data_complete <- hiv_data %>%
+  filter(complete.cases(age_B, bmi_B, race_B, education_B, hard_drugs_B, smoking_B, income_B))
+
+# Ensuring necessary variables are treated as factors
+hiv_data_complete <- hiv_data_complete %>%
+  mutate(education_B = factor(education_B,
+                              levels = c("Did Not Go to College", "Went to College")),
+         race_B = factor(race_B,
+                         levels = c("Other", "White, Non-Hispanic")),
+         smoking_B = factor(smoking_B,
+                            levels = c("Never Smoked", "Smoked")),
+         income_B = factor(income_B,
+                           levels = 1:7,
+                           labels = c("Less than $10,000",
+                                      "$10,000–19,999",
+                                      "$20,000–29,999",
+                                      "$30,000–39,999",
+                                      "$40,000–49,999",
+                                      "$50,000–59,999",
+                                      "$60,000 or more")))
+
+```
+
+
+
+## Question 1
+How does treatment response 2 years after initiating HAART differ between subjects who report using hard drugs, such as heroin and cocaine, at baseline and other subjects, who did not report hard drug use at baseline?
+
+
+```{r}
+#### Frequentist Approach ####
+# Model for Viral Load
+vload_model <- lm(log_VLOAD_Y2 ~ log_VLOAD_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+
+# Model for T-Cell Count
+tcell_model <- lm(LEU3N_Y2 ~ LEU3N_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+
+# Model for Mental QOL Score
+ment_qol_model <- lm(AGG_MENT_Y2 ~ AGG_MENT_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+
+# Model for Physical QOL Score
+phys_qol_model <- lm(AGG_PHYS_Y2 ~ AGG_PHYS_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+
+```
+
+
+```{r, echo = F}
+# Summary Tables for Frequentist Approach
+# Results of Viral Load model
+tbl_vload <- tbl_regression(vload_model,
+                            conf.level = 0.95,
+                            intercept = TRUE,
+                            estimate_fun = ~style_number(.x, digits = 3),
+                            label = list("hard_drugs_B" ~ "Hard Drugs Use Prior to Treatment",
+                                          "(Intercept)" ~ "Intercept",
+                                          "log_VLOAD_B" ~ "Log10 Viral Load (Baseline)",
+                                          "age_B" ~ "Age",
+                                          "bmi_B" ~ "BMI",
+                                          "race_B" ~ "Race",
+                                          "education_B" ~ "Education",
+                                          "smoking_B" ~ "Smoking Status",
+                                          "income_B" ~ "Income"))
+
+# Results of T-Cell Count model
+tbl_tcell <- tbl_regression(tcell_model,
+                            conf.level = 0.95,
+                            intercept = TRUE,
+                            estimate_fun = ~style_number(.x, digits = 3),
+                            label = list("hard_drugs_B" ~ "Hard Drugs Use Prior to Treatment",
+                                          "(Intercept)" ~ "Intercept",
+                                          "LEU3N_B" ~ "T-Cell Count (Baseline)",
+                                          "age_B" ~ "Age",
+                                          "bmi_B" ~ "BMI",
+                                          "race_B" ~ "Race",
+                                          "education_B" ~ "Education",
+                                          "smoking_B" ~ "Smoking Status",
+                                          "income_B" ~ "Income"))
+
+# Results of Mental QOL Score model
+tbl_ment_qol <- tbl_regression(ment_qol_model,
+                               conf.level = 0.95,
+                               intercept = TRUE,
+                               estimate_fun = ~style_number(.x, digits = 3),
+                               label = list("hard_drugs_B" ~ "Hard Drugs Use Prior to Treatment",
+                                          "(Intercept)" ~ "Intercept",
+                                          "AGG_MENT_B" ~ "Mental QOL Score (Baseline)",
+                                          "age_B" ~ "Age",
+                                          "bmi_B" ~ "BMI",
+                                          "race_B" ~ "Race",
+                                          "education_B" ~ "Education",
+                                          "smoking_B" ~ "Smoking Status",
+                                          "income_B" ~ "Income"))
+
+# Results of Mental QOL Score model
+tbl_phys_qol <- tbl_regression(phys_qol_model,
+                               conf.level = 0.95,
+                               intercept = TRUE,
+                               estimate_fun = ~style_number(.x, digits = 3),
+                               label = list("hard_drugs_B" ~ "Hard Drugs Use Prior to Treatment",
+                                          "(Intercept)" ~ "Intercept",
+                                          "AGG_PHYS_B" ~ "Physical QOL Score (Baseline)",
+                                          "age_B" ~ "Age",
+                                          "bmi_B" ~ "BMI",
+                                          "race_B" ~ "Race",
+                                          "education_B" ~ "Education",
+                                          "smoking_B" ~ "Smoking Status",
+                                          "income_B" ~ "Income"))
+
+
+# Combining model results into nice table
+tbl_combined <- tbl_merge(tbls = list(tbl_vload, tbl_tcell, tbl_ment_qol, tbl_phys_qol),
+                          tab_spanner = c("**Viral Load Model**", "**T-Cell Model**", "**Mental QOL Model**", "**Physical QOL Model**"))
+
+
+# Editing combined table
+tbl_main <- tbl_combined %>%
+  modify_table_body(~ .x %>%
+                      filter(variable == "hard_drugs_B") %>%
+                      mutate(label = "Hard Drugs Use Prior to Treatment"))
+
+
+
+
+# Table for Appendix with covariates
+tbl_combined
+
+# Smaller Table for Report focused on primary predictor of interest
+tbl_main
+
+```
+
+
+
+
+
+```{r, echo = F}
+#### Bayesian Approach ####
+## Step 1 - Define the model ##
+# Half Normal prior on sigma and normal priors on the regression coefficients
+
+stan_file <- write_stan_file("data {
+  int<lower=0> N;                  // number of observations
+  int<lower=0> P;                  // number of predictors including intercept
+  matrix[N, P] X;                  // design matrix (first column = intercept)
+  vector[N] y;                     // outcome
+
+  vector[P] prior_mean;            // prior means for each beta
+  vector<lower=0>[P] prior_sd;     // prior SDs for each beta
+
+  real<lower=0> sigma_prior_sd;    // SD for half-normal prior on sigma
+}
+
+parameters {vector[P] beta;                  // regression coefficients
+            real<lower=0> sigma;             // residual SD
+            }
+
+model {
+  // Vectorized priors for regression coefficients
+  beta ~ normal(prior_mean, prior_sd);
+
+  // Half-normal prior for sigma
+  sigma ~ normal(0, sigma_prior_sd);
+
+  // Likelihood
+  y ~ normal(X * beta, sigma);
+}
+
+generated quantities {
+  // log likelihood for each observation for calculating model fit stats
+  vector[N] log_lik;
+  
+  for (n in 1:N) {
+    log_lik[n] = normal_lpdf(y[n] | X[n] * beta, sigma);}
+  }", dir="Code/STAN", basename='linear_regression_half_normal'
+)
+
+
+## Step 2 - Compile the Stan program ##
+mod <- cmdstan_model('Code/STAN/linear_regression_half_normal.stan')
+
+
+## Step 3 - Prepare your data to pass to Stan ##
+# Variables of linear regression
+outcomes <- c("log_VLOAD_Y2", "LEU3N_Y2", "AGG_MENT_Y2", "AGG_PHYS_Y2")
+baseline_vars <- c("log_VLOAD_B", "LEU3N_B", "AGG_MENT_B", "AGG_PHYS_B")
+other_covariates <- c("age_B", "bmi_B", "race_B", "education_B", "hard_drugs_B", "smoking_B", "income_B")
+
+# Initializing list to store data for stan models
+stan_data_list <- list()
+
+for (i in seq_along(outcomes)) {
+  # Outcome data
+  outcome <- outcomes[i]
+  
+  # Create design matrix including baseline for this outcome
+  baseline <- baseline_vars[i]
+  X <- model.matrix(~ ., data = hiv_data[, c(baseline, other_covariates)])
+  
+  # Additional Variables Needed
+  N <- nrow(X)      # N is the number of observations in your data set 
+  P <- ncol(X)      # P is the number of columns in the design matrix
+  
+  # Hyperparameters for prior distributions.
+  m <- c(1, rep(0, (P-1)))      # mvnorm mean
+  s <- rep(100,P)               # variance 100^2
+  sigma_sd <- 100
+  
+  # Save data for each model to list
+  stan_data_list[[outcome]] <- list(N = N,
+                                    P = P,
+                                    X = X,
+                                    y = hiv_data[[outcome]],
+                                    prior_mean = m,
+                                    prior_sd = s,
+                                    sigma_prior_sd = sigma_sd)
+}
+
+```
+
+
+```{r}
+## Step 4 - Fitting Models ##
+# Model for Viral Load
+vload_fit <- mod$sample(data = stan_data_list$log_VLOAD_Y2,
+                        chains = 4,
+                        iter_warmup = 5000,
+                        iter_sampling = 25000,
+                        seed = 6624)
+
+# Model for T-Cell Count
+tcell_fit <- mod$sample(data = stan_data_list$LEU3N_Y2,
+                        chains = 4,
+                        iter_warmup = 5000,
+                        iter_sampling = 25000,
+                        seed = 6624)
+
+# Model for Mental QOL Score
+ment_qol_fit <- mod$sample(data = stan_data_list$AGG_MENT_Y2,
+                           chains = 4,
+                           iter_warmup = 5000,
+                           iter_sampling = 25000,
+                           seed = 6624)
+
+# Model for Physical QOL Score
+phys_qol_fit <- mod$sample(data = stan_data_list$AGG_PHYS_Y2,
+                           chains = 4,
+                           iter_warmup = 5000,
+                           iter_sampling = 25000,
+                           seed = 6624)
+
+```
+
+
+```{r}
+## Step 5 - Summarize the posterior ##
+# Defining function from code provided
+summarize_posterior <- function(fit, variables = NULL, ci = 0.95) {
+  # Quick summary
+  if (!is.null(variables)) {
+    print(fit$summary(variables = variables))
+  }
+  
+  # Extract draws
+  draws <- fit$draws()  
+  draws_mat <- as_draws_matrix(draws)
+  
+  # Only keep parameter columns (exclude lp__ and log_lik)
+  params <- colnames(draws_mat)
+  params <- params[!grepl("lp__|log_lik", params)]
+  
+  # Summarize each parameter
+  summary_table <- lapply(params, function(p) {
+    vals <- as.numeric(draws_mat[, p])
+    
+    # Monte Carlo standard error
+    mcse_val <- mcmcse::mcse(vals)$se
+    
+    # Effective sample size
+    ess_val <- ess_bulk(vals)
+    
+    # 95% HPDI
+    hpd <- hdi(vals, ci = ci)
+    
+    tibble(Parameter = p,
+           Estimate  = mean(vals),
+           Std_Dev   = sd(vals),
+           MCSE      = mcse_val,
+           HPDI_2.5  = hpd$CI_low,
+           HPDI_97.5 = hpd$CI_high,
+           ESS       = ess_val)
+  }) %>% bind_rows()
+  
+  # Optional: check MCSE rule of thumb (< 6% of posterior SD)
+  summary_table <- summary_table %>%
+    mutate(MCSE_pct = 100 * MCSE / Std_Dev,
+           MCSE_ok  = MCSE_pct < 6)
+  
+  return(summary_table)
+}
+
+
+# Applying function to all four models
+posterior_summary_vload <- summarize_posterior(vload_fit, 
+                                               variables = c("hard_drugs_B"))
+posterior_summary_tcell <- summarize_posterior(tcell_fit, 
+                                               variables = c("hard_drugs_B"))
+posterior_summary_ment <- summarize_posterior(ment_qol_fit, 
+                                              variables = c("hard_drugs_B"))
+posterior_summary_phys <- summarize_posterior(phys_qol_fit, 
+                                              variables = c("hard_drugs_B"))
+
+print(posterior_summary_vload)
+print(posterior_summary_tcell)
+print(posterior_summary_ment)
+print(posterior_summary_phys)
+
+```
+
+
+```{r}
+## Step 6 - Model fit statistics ##
+# Extract the log likelihood info
+loglik_mat_vload <- as_draws_matrix(vload_fit$draws("log_lik"))
+loglik_mat_tcell <- as_draws_matrix(tcell_fit$draws("log_lik"))
+loglik_mat_ment <- as_draws_matrix(ment_qol_fit$draws("log_lik"))
+loglik_mat_phys <- as_draws_matrix(phys_qol_fit$draws("log_lik"))
+
+# Get LOO-CV and WAIC
+loo_res_vload <- loo(loglik_mat_vload)
+loo_res_tcell <- loo(loglik_mat_tcell)
+loo_res_ment <- loo(loglik_mat_ment)
+loo_res_phys <- loo(loglik_mat_phys)
+
+waic_res_vload <- waic(loglik_mat_vload)
+waic_res_tcell <- waic(loglik_mat_tcell)
+waic_res_ment <- waic(loglik_mat_ment)
+waic_res_phys <- waic(loglik_mat_phys)
+
+print(loo_res_vload)
+print(loo_res_tcell)
+print(loo_res_ment)
+print(loo_res_phys)
+print(waic_res_vload)
+print(waic_res_tcell)
+print(waic_res_ment)
+print(waic_res_phys)
+
+```
+
+
+
+
+```{r, echo = F}
+## Step 7 - MCMC Diagnostics ##
+# Defining function from code provided
+generate_diagnostics <- function(fit, variables = NULL) {
+ draws <- as_draws_array(fit$draws())
+ draws_df <- as_draws_df(fit$draws())
+ 
+ # Trace plots
+ mcmc_trace(draws, pars = variables)
+ 
+ # R-hat and ESS diagnostics
+ fit$summary(variables = variables)
+ 
+ # Posterior Density Plots
+ mcmc_dens_overlay(draws, pars = variables)
+ 
+ # Auto-correlation 
+ mcmc_acf(draws, pars = variables)
+
+ # Diagnostics from cmdstan
+ fit$cmdstan_diagnose()
+ 
+ return(list(draws_array = draws_array,
+             draws_df = draws_df,
+             summary = summary_table,
+             cmdstan_diag = cmdstan_diag))
+}
+
+
+# Applying function to all four models
+diag_results_vload <- generate_diagnostics(vload_fit, variables = c("hard_drugs_B"))
+diag_results_tcell <- generate_diagnostics(tcell_fit, variables = c("hard_drugs_B"))
+diag_results_ment <- generate_diagnostics(ment_qol_fit, variables = c("hard_drugs_B"))
+diag_results_phys <- generate_diagnostics(phys_qol_fit, variables = c("hard_drugs_B"))
+
+```
+
+
+
+
+
+
+
+## Question 2
+Could hard drug use explain the difference in adherence?
+
+
+
+
+
+
+
+
+
+
