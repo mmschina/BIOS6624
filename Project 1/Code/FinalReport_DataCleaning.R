@@ -11,39 +11,25 @@ hiv_data <- read.csv(here("Project 1/Data", "hiv_6624_final.csv"))
 
 
 # Subsetting dataset to only include baseline and year 2
-hiv_data <- hiv_data %>%
+hiv_data_cleaned <- hiv_data %>%
   filter(years %in% c(0,2))
 
-# Removing any observations missing values for four outcomes of interest
-hiv_data_cleaned <- hiv_data %>%
-  filter(!is.na(VLOAD),
-         !is.na(LEU3N),
-         !is.na(AGG_MENT),
-         !is.na(AGG_PHYS))
 
-
-# Handling implausible values
-# Excluding participants with BMIs less than 6.7 or greater than 250
-hiv_data_cleaned <- hiv_data_cleaned %>%
-  filter(BMI >= 6.7 & BMI <= 250)
-
-
-# Removing any participants missing either baseline or year 2 visits after applying exclusion criteria
+# Removing any participants missing either baseline or year 2 visits
 hiv_data_cleaned <- hiv_data_cleaned %>%
   group_by(newid) %>%
   filter(n() == 2) %>%
-  ungroup() 
+  ungroup()
 
 
-# Log10 transforming Viral Load to address skewness
+# Log10 transforming Viral Load to address skewness found during exploratory study
 hiv_data_cleaned <- hiv_data_cleaned %>%
   mutate(log_vload = log10(VLOAD))
 
 
-
 # Reorganizing dataframe so there is only one row per participant
-# Maintaining baseline age, bmi, race, education, hard drug use indicator, smoking status, income
-# Maintaining year 2 adherence
+# Keeping baseline covariates of age, bmi, race, education, hard drug use indicator, smoking status, income
+# Keeping year 2 covariate of adherence
 hiv_data_org <- hiv_data_cleaned %>%
   group_by(newid) %>%
   summarise(log_VLOAD_B = log_vload[years == 0],
@@ -65,21 +51,36 @@ hiv_data_org <- hiv_data_cleaned %>%
   )
 
 
-
 # Collapsing race and education categories
 # Might need to more 4 for education, clarify collapse criteria (At least one year college but no degree)
 hiv_data_org <- hiv_data_org %>%
-  mutate(education_B = case_when(education_B %in% c(1,2,3) ~ "Did Not Go to College",
-                                 education_B %in% c(4,5,6,7) ~ "Went to College"),
+  mutate(education_B = case_when(education_B %in% c(1,2,3,4) ~ "Not College Graduate",
+                                 education_B %in% c(5,6,7) ~ "College Graduate"),
          race_B = case_when(race_B %in% c(2,3,4,7,8) ~ "Other",
                             race_B == 1 ~ "White, Non-Hispanic"),
-         smoking_B = case_when(smoking_B == 1 ~ "Never Smoked",
-                               smoking_B %in% c(2,3) ~ "Smoked"))
+         smoking_B = case_when(smoking_B %in% c(1,2) ~ "Not Current Smoker",
+                               smoking_B == 3 ~ "Current Smoker"),
+         adherence_Y2 = case_when(adherence_Y2 %in% c(1,2) ~ "> 95%",
+                                  adherence_Y2 %in% c(3,4) ~ "< 95%"))
 
 
 # Turning "Do Not Wish to Answer" into NA for income
 hiv_data_org <- hiv_data_org %>%
   mutate(income_B = na_if(income_B, 9))
+
+
+# Removing observations with implausible BMI values, < 6.7 (anorexic) or > 250 (extreme obesity)
+implausible_bmi_ids <- hiv_data_org %>%
+  filter(bmi_B < 6.7 | bmi_B > 250) %>%
+  pull(newid)
+
+hiv_data_org <- hiv_data_org %>%
+  filter(!newid %in% implausible_bmi_ids)
+
+
+# Excluding any observations that have missing values for any of the outcomes of interest
+hiv_data_org <- hiv_data_org %>%
+  filter(if_all(c(log_VLOAD_B, log_VLOAD_Y2, LEU3N_B, LEU3N_Y2, AGG_MENT_B, AGG_MENT_Y2, AGG_PHYS_B, AGG_PHYS_Y2), ~ !is.na(.)))
 
 
 
