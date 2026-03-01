@@ -20,6 +20,8 @@ library(bayestestR)
 library(mcmcse)
 library(loo)
 library(tibble)
+library(kableExtra)
+library(broom)
 
 ```
 
@@ -33,18 +35,14 @@ hiv_data <- read.csv(here("Project 1/Data", "hiv_data_cleaned.csv"))
 
 ```{r}
 # Data Management
-# Complete Case Analysis
-hiv_data_complete <- hiv_data %>%
-  filter(complete.cases(age_B, bmi_B, race_B, education_B, hard_drugs_B, smoking_B, income_B))
-
 # Ensuring necessary variables are treated as factors
-hiv_data_complete <- hiv_data_complete %>%
+hiv_data <- hiv_data %>%
   mutate(education_B = factor(education_B,
-                              levels = c("Did Not Go to College", "Went to College")),
+                              levels = c("Not College Graduate", "College Graduate")),
          race_B = factor(race_B,
                          levels = c("Other", "White, Non-Hispanic")),
          smoking_B = factor(smoking_B,
-                            levels = c("Never Smoked", "Smoked")),
+                            levels = c("Not Current Smoker", "Current Smoker")),
          income_B = factor(income_B,
                            levels = 1:7,
                            labels = c("Less than $10,000",
@@ -53,7 +51,42 @@ hiv_data_complete <- hiv_data_complete %>%
                                       "$30,000–39,999",
                                       "$40,000–49,999",
                                       "$50,000–59,999",
-                                      "$60,000 or more")))
+                                      "$60,000 or more")),
+         adherence_Y2 = factor(adherence_Y2,
+                               levels = c("> 95%", "< 95%")))
+
+```
+
+
+
+
+```{r, echo = F}
+# Creating table 1
+descriptive_table <- hiv_data %>%
+  select(hard_drugs_B, log_VLOAD_B, LEU3N_B, AGG_PHYS_B, AGG_MENT_B,
+         age_B, race_B, education_B, smoking_B, income_B) %>%
+  tbl_summary(by = hard_drugs_B,
+              missing = "ifany",
+              statistic = list(all_continuous() ~ "{mean} ({sd})",
+                               all_categorical() ~ "{n} ({p}%)"),
+              label = list(log_VLOAD_B ~ "Viral Load (copies/mL)",
+                           LEU3N_B ~ "CD4+ T Cell Count (# of cells)",
+                           AGG_PHYS_B ~ "Physical QOL Score",
+                           AGG_MENT_B ~ "Mental Health QOL Score",
+                           age_B ~ "Age (years)",
+                           race_B ~ "Race",
+                           education_B ~ "Highest Education Reached",
+                           smoking_B ~ "Smoking Status",
+                           income_B ~ "Income")) %>%
+  add_overall() %>%
+  modify_header(stat_1 ~ "**No Hard Drug Use** <br> N = {n}",
+                stat_2 ~ "**Hard Drug Use** <br> N = {n}") %>%
+  modify_table_body(~ .x %>%
+                      dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label))) %>%
+  modify_footnote(all_stat_cols() ~ "Continuous variables: Mean (SD); Categorical variables: n (%)")
+
+
+descriptive_table
 
 ```
 
@@ -66,16 +99,20 @@ How does treatment response 2 years after initiating HAART differ between subjec
 ```{r}
 #### Frequentist Approach ####
 # Model for Viral Load
-vload_model <- lm(log_VLOAD_Y2 ~ log_VLOAD_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+vload_model <- lm(log_VLOAD_Y2 ~ log_VLOAD_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, 
+                  data = hiv_data)
 
 # Model for T-Cell Count
-tcell_model <- lm(LEU3N_Y2 ~ LEU3N_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+tcell_model <- lm(LEU3N_Y2 ~ LEU3N_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, 
+                  data = hiv_data)
 
 # Model for Mental QOL Score
-ment_qol_model <- lm(AGG_MENT_Y2 ~ AGG_MENT_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+ment_qol_model <- lm(AGG_MENT_Y2 ~ AGG_MENT_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, 
+                     data = hiv_data)
 
 # Model for Physical QOL Score
-phys_qol_model <- lm(AGG_PHYS_Y2 ~ AGG_PHYS_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, data = hiv_data_complete)
+phys_qol_model <- lm(AGG_PHYS_Y2 ~ AGG_PHYS_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B, 
+                     data = hiv_data)
 
 ```
 
@@ -148,20 +185,8 @@ tbl_combined <- tbl_merge(tbls = list(tbl_vload, tbl_tcell, tbl_ment_qol, tbl_ph
                           tab_spanner = c("**Viral Load Model**", "**T-Cell Model**", "**Mental QOL Model**", "**Physical QOL Model**"))
 
 
-# Editing combined table
-tbl_main <- tbl_combined %>%
-  modify_table_body(~ .x %>%
-                      filter(variable == "hard_drugs_B") %>%
-                      mutate(label = "Hard Drugs Use Prior to Treatment"))
-
-
-
-
 # Table for Appendix with covariates
 tbl_combined
-
-# Smaller Table for Report focused on primary predictor of interest
-tbl_main
 
 ```
 
@@ -207,12 +232,12 @@ generated quantities {
   
   for (n in 1:N) {
     log_lik[n] = normal_lpdf(y[n] | X[n] * beta, sigma);}
-  }", dir="Code/STAN", basename='linear_regression_half_normal'
+  }", dir="STAN", basename='linear_regression_half_normal'
 )
 
 
 ## Step 2 - Compile the Stan program ##
-mod <- cmdstan_model('Code/STAN/linear_regression_half_normal.stan')
+mod <- cmdstan_model(stan_file)
 
 
 ## Step 3 - Prepare your data to pass to Stan ##
@@ -225,12 +250,17 @@ other_covariates <- c("age_B", "bmi_B", "race_B", "education_B", "hard_drugs_B",
 stan_data_list <- list()
 
 for (i in seq_along(outcomes)) {
-  # Outcome data
   outcome <- outcomes[i]
-  
-  # Create design matrix including baseline for this outcome
   baseline <- baseline_vars[i]
-  X <- model.matrix(~ ., data = hiv_data[, c(baseline, other_covariates)])
+  
+  # Select relevant columns and drop NAs
+  model_vars <- c(outcome, baseline, other_covariates)
+  model_data <- hiv_data[, model_vars] %>% na.omit()
+  
+  # Create design matrix and get y with correct dimensions without na's
+  X <- model.matrix(~ ., data = model_data[, c(baseline, other_covariates)])
+  y <- model_data[[outcome]]
+  
   
   # Additional Variables Needed
   N <- nrow(X)      # N is the number of observations in your data set 
@@ -245,7 +275,7 @@ for (i in seq_along(outcomes)) {
   stan_data_list[[outcome]] <- list(N = N,
                                     P = P,
                                     X = X,
-                                    y = hiv_data[[outcome]],
+                                    y = y,
                                     prior_mean = m,
                                     prior_sd = s,
                                     sigma_prior_sd = sigma_sd)
@@ -293,12 +323,13 @@ phys_qol_fit <- mod$sample(data = stan_data_list$AGG_PHYS_Y2,
 summarize_posterior <- function(fit, variables = NULL, ci = 0.95) {
   # Quick summary
   if (!is.null(variables)) {
-    print(fit$summary(variables = variables))
+    print(as.data.frame(fit$summary(variables = variables)))
   }
   
   # Extract draws
-  draws <- fit$draws()  
-  draws_mat <- as_draws_matrix(draws)
+  draws <- fit$draws(format = "array")
+  draws_mat <- matrix(as.numeric(draws), nrow = dim(draws)[1] * dim(draws)[2], ncol = dim(draws)[3])
+  colnames(draws_mat) <- dimnames(draws)[[3]]
   
   # Only keep parameter columns (exclude lp__ and log_lik)
   params <- colnames(draws_mat)
@@ -337,18 +368,18 @@ summarize_posterior <- function(fit, variables = NULL, ci = 0.95) {
 
 # Applying function to all four models
 posterior_summary_vload <- summarize_posterior(vload_fit, 
-                                               variables = c("hard_drugs_B"))
+                                               variables = c("beta[7]"))
 posterior_summary_tcell <- summarize_posterior(tcell_fit, 
-                                               variables = c("hard_drugs_B"))
-posterior_summary_ment <- summarize_posterior(ment_qol_fit, 
-                                              variables = c("hard_drugs_B"))
-posterior_summary_phys <- summarize_posterior(phys_qol_fit, 
-                                              variables = c("hard_drugs_B"))
+                                               variables = c("beta[7]"))
+posterior_summary_ment_qol <- summarize_posterior(ment_qol_fit, 
+                                              variables = c("beta[7]"))
+posterior_summary_phys_qol <- summarize_posterior(phys_qol_fit, 
+                                              variables = c("beta[7]"))
 
 print(posterior_summary_vload)
 print(posterior_summary_tcell)
-print(posterior_summary_ment)
-print(posterior_summary_phys)
+print(posterior_summary_ment_qol)
+print(posterior_summary_phys_qol)
 
 ```
 
@@ -364,22 +395,22 @@ loglik_mat_phys <- as_draws_matrix(phys_qol_fit$draws("log_lik"))
 # Get LOO-CV and WAIC
 loo_res_vload <- loo(loglik_mat_vload)
 loo_res_tcell <- loo(loglik_mat_tcell)
-loo_res_ment <- loo(loglik_mat_ment)
-loo_res_phys <- loo(loglik_mat_phys)
+loo_res_ment_qol <- loo(loglik_mat_ment)
+loo_res_phys_qol <- loo(loglik_mat_phys)
 
 waic_res_vload <- waic(loglik_mat_vload)
 waic_res_tcell <- waic(loglik_mat_tcell)
-waic_res_ment <- waic(loglik_mat_ment)
-waic_res_phys <- waic(loglik_mat_phys)
+waic_res_ment_qol <- waic(loglik_mat_ment)
+waic_res_phys_qol <- waic(loglik_mat_phys)
 
 print(loo_res_vload)
 print(loo_res_tcell)
-print(loo_res_ment)
-print(loo_res_phys)
+print(loo_res_ment_qol)
+print(loo_res_phys_qol)
 print(waic_res_vload)
 print(waic_res_tcell)
-print(waic_res_ment)
-print(waic_res_phys)
+print(waic_res_ment_qol)
+print(waic_res_phys_qol)
 
 ```
 
@@ -390,23 +421,22 @@ print(waic_res_phys)
 ## Step 7 - MCMC Diagnostics ##
 # Defining function from code provided
 generate_diagnostics <- function(fit, variables = NULL) {
- draws <- as_draws_array(fit$draws())
- draws_df <- as_draws_df(fit$draws())
+ draws_array <- as_draws_array(fit$draws())
  
  # Trace plots
- mcmc_trace(draws, pars = variables)
+ mcmc_trace(draws_array, pars = variables)
  
  # R-hat and ESS diagnostics
- fit$summary(variables = variables)
+ summary_table <- fit$summary(variables = variables)
  
  # Posterior Density Plots
- mcmc_dens_overlay(draws, pars = variables)
+ mcmc_dens_overlay(draws_array, pars = variables)
  
  # Auto-correlation 
- mcmc_acf(draws, pars = variables)
+ mcmc_acf(draws_array, pars = variables)
 
  # Diagnostics from cmdstan
- fit$cmdstan_diagnose()
+ cmdstan_diag <- fit$cmdstan_diagnose()
  
  return(list(draws_array = draws_array,
              draws_df = draws_df,
@@ -416,13 +446,79 @@ generate_diagnostics <- function(fit, variables = NULL) {
 
 
 # Applying function to all four models
-diag_results_vload <- generate_diagnostics(vload_fit, variables = c("hard_drugs_B"))
-diag_results_tcell <- generate_diagnostics(tcell_fit, variables = c("hard_drugs_B"))
-diag_results_ment <- generate_diagnostics(ment_qol_fit, variables = c("hard_drugs_B"))
-diag_results_phys <- generate_diagnostics(phys_qol_fit, variables = c("hard_drugs_B"))
+diag_results_vload <- generate_diagnostics(vload_fit, variables = c("beta[7]"))
+diag_results_tcell <- generate_diagnostics(tcell_fit, variables = c("beta[7]"))
+diag_results_ment <- generate_diagnostics(ment_qol_fit, variables = c("beta[7]"))
+diag_results_phys <- generate_diagnostics(phys_qol_fit, variables = c("beta[7]"))
+
+
+# Saving output for each model
+for (model_name in c("vload", "tcell", "ment_qol", "phys_qol")) {
+  fit <- get(paste0(model_name, "_fit"))
+  summary <- get(paste0("posterior_summary_", model_name))
+  loo_res <- get(paste0("loo_res_", model_name))
+  waic_res <- get(paste0("waic_res_", model_name))
+  
+  sink(paste0("Project 1/Code/Output/", model_name, "_MCMCOutput.txt"))
+  print(summary)
+  print(loo_res)
+  print(waic_res)
+  print(fit$cmdstan_diagnose())
+  sink()
+  
+  pdf(paste0("Project 1/Code/Output/", model_name, "_DiagnosticPlots.pdf"))
+  draws <- as_draws_array(fit$draws())
+  print(mcmc_trace(draws, pars = "beta[7]"))
+  print(mcmc_dens_overlay(draws, pars = "beta[7]"))
+  print(mcmc_acf(draws, pars = "beta[7]"))
+  dev.off()
+}
 
 ```
 
+
+
+```{r, echo = F}
+# Creating table to illustrate comparison of the two appraoches
+# Extract frequentist results
+freq_results <- bind_rows(
+  tidy(vload_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load"),
+  tidy(tcell_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count"),
+  tidy(ment_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL"),
+  tidy(phys_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL")
+) %>%
+  mutate(
+    Beta_freq = round(estimate, 2),
+    CI_freq = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")")
+  ) %>%
+  select(Outcome, Beta_freq, CI_freq)
+
+# Extract Bayesian results
+bayes_results <- bind_rows(
+  posterior_summary_vload %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load"),
+  posterior_summary_tcell %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count"),
+  posterior_summary_ment_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL"),
+  posterior_summary_phys_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL")
+) %>%
+  mutate(
+    Beta_bayes = round(Estimate, 2),
+    CI_bayes = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")")
+  ) %>%
+  select(Outcome, Beta_bayes, CI_bayes)
+
+# Combine side by side
+combined <- left_join(freq_results, bayes_results, by = "Outcome")
+
+# Table
+combined %>%
+  kbl(col.names = c("Outcome", "β", "95% CI", "Posterior Mean", "95% HPDI"),
+      align = c("l", "r", "r", "r", "r"),
+      caption = "Comparison of Frequentist and Bayesian Estimates for Hard Drug Use") %>%
+  kable_classic(full_width = FALSE) %>%
+  add_header_above(c(" " = 1, "Frequentist" = 2, "Bayesian" = 2)) %>%
+  footnote(general = "CI = Confidence Interval; HPDI = Highest Posterior Density Interval")
+
+```
 
 
 
@@ -432,9 +528,328 @@ diag_results_phys <- generate_diagnostics(phys_qol_fit, variables = c("hard_drug
 ## Question 2
 Could hard drug use explain the difference in adherence?
 
+Will be fitting the same models again with adherence at year 2 as a predictor now.
+
+
+```{r, echo = F}
+#### Frequentist Approach ####
+# Model for Viral Load with adherence
+vload_model_adh <- lm(log_VLOAD_Y2 ~ log_VLOAD_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B + adherence_Y2, 
+                  data = hiv_data)
+
+# Model for T-Cell Count
+tcell_model_adh <- lm(LEU3N_Y2 ~ LEU3N_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B + adherence_Y2, 
+                  data = hiv_data)
+
+# Model for Mental QOL Score
+ment_qol_model_adh <- lm(AGG_MENT_Y2 ~ AGG_MENT_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B + adherence_Y2, 
+                     data = hiv_data)
+
+# Model for Physical QOL Score
+phys_qol_model_adh <- lm(AGG_PHYS_Y2 ~ AGG_PHYS_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B + adherence_Y2, 
+                     data = hiv_data)
+
+```
+
+
+```{r, echo = F}
+# Creating table for report of estimates and corresponding relevant information for hard_drugs_B in all models with and without adherence
+results <- bind_rows(
+  tidy(vload_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load", Adherence = "Without"),
+  tidy(tcell_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count", Adherence = "Without"),
+  tidy(ment_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL", Adherence = "Without"),
+  tidy(phys_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL", Adherence = "Without"),
+  tidy(vload_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load", Adherence = "With"),
+  tidy(tcell_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count", Adherence = "With"),
+  tidy(ment_qol_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL", Adherence = "With"),
+  tidy(phys_qol_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL", Adherence = "With")
+) %>%
+  mutate(
+    Beta = round(estimate, 2),
+    CI = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")"),
+    `p-value` = ifelse(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))
+  ) %>%
+  select(Outcome, Beta, CI, `p-value`)
+
+
+results %>%
+  kbl(col.names = c("Outcome", "β", "95% CI", "p-value"),
+      align = c("l", "r", "r", "r")) %>%
+  kable_classic(full_width = FALSE) %>%
+  pack_rows("Without Adherence", 1, 4) %>%
+  pack_rows("With Adherence", 5, 8)
+
+```
 
 
 
+
+```{r, echo = F}
+## Step 3 - Prepare your data to pass to Stan ##
+# Variables of linear regression
+outcomes <- c("log_VLOAD_Y2", "LEU3N_Y2", "AGG_MENT_Y2", "AGG_PHYS_Y2")
+baseline_vars <- c("log_VLOAD_B", "LEU3N_B", "AGG_MENT_B", "AGG_PHYS_B")
+other_covariates <- c("age_B", "bmi_B", "race_B", "education_B", "hard_drugs_B", "smoking_B", "income_B", "adherence_Y2")
+
+# Initializing list to store data for stan models
+stan_data_list <- list()
+
+for (i in seq_along(outcomes)) {
+  outcome <- outcomes[i]
+  baseline <- baseline_vars[i]
+  
+  # Select relevant columns and drop NAs
+  model_vars <- c(outcome, baseline, other_covariates)
+  model_data <- hiv_data[, model_vars] %>% na.omit()
+  
+  # Create design matrix and get y with correct dimensions without na's
+  X <- model.matrix(~ ., data = model_data[, c(baseline, other_covariates)])
+  y <- model_data[[outcome]]
+  
+  
+  # Additional Variables Needed
+  N <- nrow(X)      # N is the number of observations in your data set 
+  P <- ncol(X)      # P is the number of columns in the design matrix
+  
+  # Hyperparameters for prior distributions.
+  m <- c(1, rep(0, (P-1)))      # mvnorm mean
+  s <- rep(100,P)               # variance 100^2
+  sigma_sd <- 100
+  
+  # Save data for each model to list
+  stan_data_list[[outcome]] <- list(N = N,
+                                    P = P,
+                                    X = X,
+                                    y = y,
+                                    prior_mean = m,
+                                    prior_sd = s,
+                                    sigma_prior_sd = sigma_sd)
+}
+
+```
+
+
+```{r}
+## Step 4 - Fitting Models ##
+# Model for Viral Load
+vload_fit_adh <- mod$sample(data = stan_data_list$log_VLOAD_Y2,
+                            chains = 4,
+                            iter_warmup = 5000,
+                            iter_sampling = 25000,
+                            seed = 6624)
+
+# Model for T-Cell Count
+tcell_fit_adh <- mod$sample(data = stan_data_list$LEU3N_Y2,
+                            chains = 4,
+                            iter_warmup = 5000,
+                            iter_sampling = 25000,
+                            seed = 6624)
+
+# Model for Mental QOL Score
+ment_qol_fit_adh <- mod$sample(data = stan_data_list$AGG_MENT_Y2,
+                               chains = 4,
+                               iter_warmup = 5000,
+                               iter_sampling = 25000,
+                               seed = 6624)
+
+# Model for Physical QOL Score
+phys_qol_fit_adh <- mod$sample(data = stan_data_list$AGG_PHYS_Y2,
+                               chains = 4,
+                               iter_warmup = 5000,
+                               iter_sampling = 25000,
+                               seed = 6624)
+
+```
+
+
+```{r}
+## Step 5 - Summarize the posterior ##
+# Defining function from code provided
+summarize_posterior <- function(fit, variables = NULL, ci = 0.95) {
+  # Quick summary
+  if (!is.null(variables)) {
+    print(as.data.frame(fit$summary(variables = variables)))
+  }
+  
+  # Extract draws
+  draws <- fit$draws(format = "array")
+  draws_mat <- matrix(as.numeric(draws), nrow = dim(draws)[1] * dim(draws)[2], ncol = dim(draws)[3])
+  colnames(draws_mat) <- dimnames(draws)[[3]]
+  
+  # Only keep parameter columns (exclude lp__ and log_lik)
+  params <- colnames(draws_mat)
+  params <- params[!grepl("lp__|log_lik", params)]
+  
+  # Summarize each parameter
+  summary_table <- lapply(params, function(p) {
+    vals <- as.numeric(draws_mat[, p])
+    
+    # Monte Carlo standard error
+    mcse_val <- mcmcse::mcse(vals)$se
+    
+    # Effective sample size
+    ess_val <- ess_bulk(vals)
+    
+    # 95% HPDI
+    hpd <- hdi(vals, ci = ci)
+    
+    tibble(Parameter = p,
+           Estimate  = mean(vals),
+           Std_Dev   = sd(vals),
+           MCSE      = mcse_val,
+           HPDI_2.5  = hpd$CI_low,
+           HPDI_97.5 = hpd$CI_high,
+           ESS       = ess_val)
+  }) %>% bind_rows()
+  
+  # Optional: check MCSE rule of thumb (< 6% of posterior SD)
+  summary_table <- summary_table %>%
+    mutate(MCSE_pct = 100 * MCSE / Std_Dev,
+           MCSE_ok  = MCSE_pct < 6)
+  
+  return(summary_table)
+}
+
+
+# Applying function to all four models
+posterior_summary_vload_adh <- summarize_posterior(vload_fit_adh, 
+                                                   variables = c("beta[7]"))
+posterior_summary_tcell_adh <- summarize_posterior(tcell_fit_adh, 
+                                                   variables = c("beta[7]"))
+posterior_summary_ment_qol_adh <- summarize_posterior(ment_qol_fit_adh, 
+                                                      variables = c("beta[7]"))
+posterior_summary_phys_qol_adh <- summarize_posterior(phys_qol_fit_adh, 
+                                                      variables = c("beta[7]"))
+
+print(posterior_summary_vload_adh)
+print(posterior_summary_tcell_adh)
+print(posterior_summary_ment_qol_adh)
+print(posterior_summary_phys_qol_adh)
+
+```
+
+
+```{r}
+## Step 6 - Model fit statistics ##
+# Extract the log likelihood info
+loglik_mat_vload_adh <- as_draws_matrix(vload_fit$draws("log_lik"))
+loglik_mat_tcell_adh <- as_draws_matrix(tcell_fit$draws("log_lik"))
+loglik_mat_ment_adh <- as_draws_matrix(ment_qol_fit$draws("log_lik"))
+loglik_mat_phys_adh <- as_draws_matrix(phys_qol_fit$draws("log_lik"))
+
+# Get LOO-CV and WAIC
+loo_res_vload_adh <- loo(loglik_mat_vload)
+loo_res_tcell_adh <- loo(loglik_mat_tcell)
+loo_res_ment_qol_adh <- loo(loglik_mat_ment)
+loo_res_phys_qol_adh <- loo(loglik_mat_phys)
+
+waic_res_vload_adh <- waic(loglik_mat_vload)
+waic_res_tcell_adh <- waic(loglik_mat_tcell)
+waic_res_ment_qol_adh <- waic(loglik_mat_ment)
+waic_res_phys_qol_adh <- waic(loglik_mat_phys)
+
+print(loo_res_vload_adh)
+print(loo_res_tcell_adh)
+print(loo_res_ment_qol_adh)
+print(loo_res_phys_qol_adh)
+print(waic_res_vload_adh)
+print(waic_res_tcell_adh)
+print(waic_res_ment_qol_adh)
+print(waic_res_phys_qol_adh)
+
+```
+
+
+
+
+```{r, echo = F}
+## Step 7 - MCMC Diagnostics ##
+# Defining function from code provided
+generate_diagnostics <- function(fit, variables = NULL) {
+ draws_array <- as_draws_array(fit$draws())
+ 
+ # Trace plots
+ mcmc_trace(draws_array, pars = variables)
+ 
+ # R-hat and ESS diagnostics
+ summary_table <- fit$summary(variables = variables)
+ 
+ # Posterior Density Plots
+ mcmc_dens_overlay(draws_array, pars = variables)
+ 
+ # Auto-correlation 
+ mcmc_acf(draws_array, pars = variables)
+
+ # Diagnostics from cmdstan
+ cmdstan_diag <- fit$cmdstan_diagnose()
+ 
+ return(list(draws_array = draws_array,
+             draws_df = draws_df,
+             summary = summary_table,
+             cmdstan_diag = cmdstan_diag))
+}
+
+
+# Applying function to all four models
+diag_results_vload_adh <- generate_diagnostics(vload_fit_adh, variables = c("beta[7]"))
+diag_results_tcell_adh <- generate_diagnostics(tcell_fit_adh, variables = c("beta[7]"))
+diag_results_ment_adh <- generate_diagnostics(ment_qol_fit_adh, variables = c("beta[7]"))
+diag_results_phys_adh <- generate_diagnostics(phys_qol_fit_adh, variables = c("beta[7]"))
+
+
+# Saving output for each model
+for (model_name in c("vload", "tcell", "ment_qol", "phys_qol")) {
+  fit <- get(paste0(model_name, "_fit_adh"))
+  summary <- get(paste0("posterior_summary_", model_name, "_adh"))
+  loo_res <- get(paste0("loo_res_", model_name, "_adh"))
+  waic_res <- get(paste0("waic_res_", model_name, "_adh"))
+  
+  sink(paste0("Project 1/Code/Output/", model_name, "_MCMCOutput.txt"))
+  print(summary)
+  print(loo_res)
+  print(waic_res)
+  print(fit$cmdstan_diagnose())
+  sink()
+  
+  pdf(paste0("Project 1/Code/Output/", model_name, "_DiagnosticPlots.pdf"))
+  draws <- as_draws_array(fit$draws())
+  print(mcmc_trace(draws, pars = "beta[7]"))
+  print(mcmc_dens_overlay(draws, pars = "beta[7]"))
+  print(mcmc_acf(draws, pars = "beta[7]"))
+  dev.off()
+}
+
+```
+
+
+```{r, echo = F}
+# Creating table for report of estimates and corresponding relevant information for hard_drugs_B in all models with and without adherence
+# Extract hard_drugs_B (beta[7]) from each posterior summary
+results_bayes <- bind_rows(
+  posterior_summary_vload %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load", Adherence = "Without"),
+  posterior_summary_tcell %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count", Adherence = "Without"),
+  posterior_summary_ment_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL", Adherence = "Without"),
+  posterior_summary_phys_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL", Adherence = "Without"),
+  posterior_summary_vload_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load", Adherence = "With"),
+  posterior_summary_tcell_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count", Adherence = "With"),
+  posterior_summary_ment_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL", Adherence = "With"),
+  posterior_summary_phys_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL", Adherence = "With")
+) %>%
+  mutate(
+    Beta = round(Estimate, 2),
+    CI = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")"),
+  ) %>%
+  select(Outcome, Beta, CI)
+
+results_bayes %>%
+  kbl(col.names = c("Outcome", "Posterior Mean", "95% HPDI"),
+      align = c("l", "r", "r")) %>%
+  kable_classic(full_width = FALSE) %>%
+  pack_rows("Without Adherence", 1, 4) %>%
+  pack_rows("With Adherence", 5, 8)
+
+
+```
 
 
 
