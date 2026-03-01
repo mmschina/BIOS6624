@@ -32,7 +32,8 @@ hiv_data_cleaned <- hiv_data_cleaned %>%
 # Keeping year 2 covariate of adherence
 hiv_data_org <- hiv_data_cleaned %>%
   group_by(newid) %>%
-  summarise(log_VLOAD_B = log_vload[years == 0],
+  summarise(VLOAD_B = VLOAD[years == 0],
+            log_VLOAD_B = log_vload[years == 0],
             log_VLOAD_Y2 = log_vload[years == 2],
             LEU3N_B = LEU3N[years == 0],
             LEU3N_Y2 = LEU3N[years == 2],
@@ -51,8 +52,7 @@ hiv_data_org <- hiv_data_cleaned %>%
   )
 
 
-# Collapsing race and education categories
-# Might need to more 4 for education, clarify collapse criteria (At least one year college but no degree)
+# Collapsing education, race, smoking and adherence categories
 hiv_data_org <- hiv_data_org %>%
   mutate(education_B = case_when(education_B %in% c(1,2,3,4) ~ "Not College Graduate",
                                  education_B %in% c(5,6,7) ~ "College Graduate"),
@@ -64,9 +64,13 @@ hiv_data_org <- hiv_data_org %>%
                                   adherence_Y2 %in% c(3,4) ~ "< 95%"))
 
 
-# Turning "Do Not Wish to Answer" into NA for income
+# Removing observations with "Do Not Wish to Answer" for income (9)
+no_income_ids <- hiv_data_org %>%
+  filter(income_B == 9) %>%
+  pull(newid)
+
 hiv_data_org <- hiv_data_org %>%
-  mutate(income_B = na_if(income_B, 9))
+  filter(!newid %in% no_income_ids)
 
 
 # Removing observations with implausible BMI values, < 6.7 (anorexic) or > 250 (extreme obesity)
