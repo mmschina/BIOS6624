@@ -503,19 +503,28 @@ for (model_name in c("vload", "tcell", "ment_qol", "phys_qol")) {
 ```{r, echo = F}
 # Creating table to illustrate comparison of the two appraoches
 # Extract frequentist results
-freq_results <- bind_rows(
-  tidy(vload_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load"),
-  tidy(tcell_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count"),
-  tidy(ment_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL"),
-  tidy(phys_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL")
-) %>%
-  mutate(
-    Beta_freq = round(estimate, 2),
-    CI_freq = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")")
-  ) %>%
-  select(Outcome, Beta_freq, CI_freq)
+freq_results <- bind_rows(tidy(vload_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load"),
+                          tidy(tcell_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count"),
+                          tidy(ment_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL"),
+                          tidy(phys_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL")) %>%
+  mutate(Beta_freq = round(estimate, 2),
+         CI_freq = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")"),
+         pval = ifelse(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))) %>%
+  select(Outcome, Beta_freq, CI_freq, pval)
 
 # Extract Bayesian results
+# Calculate posterior probabilities P(beta < 0)
+calc_post_prob <- function(fit, param = "beta[7]") {
+  draws <- as_draws_matrix(fit$draws())
+  beta_draws <- draws[, param]
+  round(mean(beta_draws < 0), 3)
+}
+
+pp_vload <- calc_post_prob(vload_fit)
+pp_tcell <- calc_post_prob(tcell_fit)
+pp_ment <- calc_post_prob(ment_qol_fit)
+pp_phys <- calc_post_prob(phys_qol_fit)
+
 bayes_results <- bind_rows(
   posterior_summary_vload %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load"),
   posterior_summary_tcell %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count"),
@@ -524,20 +533,22 @@ bayes_results <- bind_rows(
 ) %>%
   mutate(
     Beta_bayes = round(Estimate, 2),
-    CI_bayes = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")")
-  ) %>%
-  select(Outcome, Beta_bayes, CI_bayes)
+    CI_bayes = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")"),
+    Post_Prob = c(pp_vload, pp_tcell, pp_ment, pp_phys)) %>%
+  select(Outcome, Beta_bayes, CI_bayes, Post_Prob)
 
 # Combine side by side
 combined <- left_join(freq_results, bayes_results, by = "Outcome")
 
 # Table
 combined %>%
-  kbl(col.names = c("Outcome", "β", "95% CI", "Posterior Mean", "95% HPDI"),
-      align = c("l", "r", "r", "r", "r")) %>%
+  kbl(col.names = c("Outcome", "β", "95% CI", "p-value", "Posterior Mean", "95% HPDI", "P(β < 0)"),
+      align = c("l", "r", "r", "r", "r", "r", "r")) %>%
   kable_classic(full_width = FALSE) %>%
-  add_header_above(c(" " = 1, "Frequentist" = 2, "Bayesian" = 2)) %>%
-  footnote(general = "Recall Viral Load was log10 transformed", footnote_as_chunk = TRUE)
+  add_header_above(c(" " = 1, "Frequentist" = 3, "Bayesian" = 3)) %>%
+  footnote(general = "Viral load was log10 transformed prior to analysis.",
+           general_title = "",
+           footnote_as_chunk = TRUE)
 
 ```
 
@@ -793,14 +804,14 @@ for (model_name in c("vload", "tcell", "ment_qol", "phys_qol")) {
   loo_res <- get(paste0("loo_res_", model_name, "_adh"))
   waic_res <- get(paste0("waic_res_", model_name, "_adh"))
   
-  sink(paste0("Project 1/Code/Output/", model_name, "_MCMCOutput.txt"))
+  sink(paste0("Project 1/Code/Output/", model_name, "_adh_MCMCOutput.txt"))
   print(summary)
   print(loo_res)
   print(waic_res)
   print(fit$cmdstan_diagnose())
   sink()
   
-  pdf(paste0("Project 1/Code/Output/", model_name, "_DiagnosticPlots.pdf"))
+  pdf(paste0("Project 1/Code/Output/", model_name, "_adh_DiagnosticPlots.pdf"))
   draws <- as_draws_array(fit$draws())
   print(mcmc_trace(draws, pars = "beta[7]"))
   print(mcmc_dens_overlay(draws, pars = "beta[7]"))
@@ -828,6 +839,12 @@ combined_adh <- bind_rows(tidy(vload_model, conf.int = TRUE) %>% filter(term == 
   select(Outcome, Beta, CI_freq, pval)
 
 # Bayesian Results
+# Calculating additional posterior probabilities
+pp_vload_adh <- calc_post_prob(vload_fit_adh)
+pp_tcell_adh <- calc_post_prob(tcell_fit_adh)
+pp_ment_adh <- calc_post_prob(ment_qol_fit_adh)
+pp_phys_adh <- calc_post_prob(phys_qol_fit_adh)
+
 bayes_adh <- bind_rows(posterior_summary_vload %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load"),
                        posterior_summary_tcell %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count"),
                        posterior_summary_ment_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL"),
@@ -837,22 +854,23 @@ bayes_adh <- bind_rows(posterior_summary_vload %>% filter(Parameter == "beta[7]"
                        posterior_summary_ment_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL"),
                        posterior_summary_phys_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL")) %>%
   mutate(Post_Mean = round(Estimate, 2),
-         CI_bayes = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")")) %>%
-  select(Outcome, Post_Mean, CI_bayes)
+         CI_bayes = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")"),
+         Post_Prob = c(pp_vload, pp_tcell, pp_ment, pp_phys,
+                       pp_vload_adh, pp_tcell_adh, pp_ment_adh, pp_phys_adh)) %>%
+  select(Outcome, Post_Mean, CI_bayes, Post_Prob)
 
 
 final_table <- bind_cols(combined_adh, bayes_adh %>% select(-Outcome))
 
 # Create table
 final_table %>%
-  kbl(col.names = c("Outcome", "β", "95% CI", "p-value", "Posterior Mean", "95% HPDI"),
-      align = c("l", "r", "r", "r", "r", "r"),
-      caption = "Effect of Baseline Hard Drug Use on Year 2 Treatment Outcomes by Adherence Status") %>%
+  kbl(col.names = c("Outcome", "β", "95% CI", "p-value", "Posterior Mean", "95% HPDI", "P(β < 0)"),
+      align = c("l", "r", "r", "r", "r", "r", "r")) %>%
   kable_classic(full_width = FALSE) %>%
-  add_header_above(c(" " = 1, "Frequentist" = 3, "Bayesian" = 2)) %>%
+  add_header_above(c(" " = 1, "Frequentist" = 3, "Bayesian" = 3)) %>%  # changed 2 to 3
   pack_rows("Without Adherence", 1, 4) %>%
   pack_rows("With Adherence", 5, 8) %>%
-  footnote(general = "Viral load was log10 transformed prior to analysis. CI = Confidence Interval; HPDI = Highest Posterior Density Interval",
+  footnote(general = "Viral load was log10 transformed prior to analysis",
            general_title = "",
            footnote_as_chunk = TRUE)
 
