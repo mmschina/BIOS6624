@@ -22,6 +22,7 @@ library(loo)
 library(tibble)
 library(kableExtra)
 library(broom)
+library(gt)
 
 ```
 
@@ -63,17 +64,18 @@ hiv_data <- hiv_data %>%
 ```{r, echo = F}
 # Creating table 1
 descriptive_table <- hiv_data %>%
-  select(hard_drugs_B, log_VLOAD_B, LEU3N_B, AGG_PHYS_B, AGG_MENT_B,
-         age_B, race_B, education_B, smoking_B, income_B) %>%
+  select(hard_drugs_B, VLOAD_B, LEU3N_B, AGG_PHYS_B, AGG_MENT_B,
+         age_B, bmi_B, race_B, education_B, smoking_B, income_B) %>%
   tbl_summary(by = hard_drugs_B,
               missing = "ifany",
               statistic = list(all_continuous() ~ "{mean} ({sd})",
                                all_categorical() ~ "{n} ({p}%)"),
-              label = list(log_VLOAD_B ~ "Viral Load (copies/mL)",
+              label = list(VLOAD_B ~ "Viral Load (copies/mL)",
                            LEU3N_B ~ "CD4+ T Cell Count (# of cells)",
                            AGG_PHYS_B ~ "Physical QOL Score",
                            AGG_MENT_B ~ "Mental Health QOL Score",
                            age_B ~ "Age (years)",
+                           bmi_B ~ "BMI (kg/m^2)",
                            race_B ~ "Race",
                            education_B ~ "Highest Education Reached",
                            smoking_B ~ "Smoking Status",
@@ -86,7 +88,8 @@ descriptive_table <- hiv_data %>%
   modify_footnote(all_stat_cols() ~ "Continuous variables: Mean (SD); Categorical variables: n (%)")
 
 
-descriptive_table
+# Save table as image for report
+gtsave(as_gt(descriptive_table), "descriptivetable_finalreport.png")
 
 ```
 
@@ -190,6 +193,25 @@ tbl_combined
 
 ```
 
+
+```{r, echo = F}
+# Residual Diagnostic Plots to check transformations
+par(mfrow = c(2, 2))
+
+# Viral Load
+plot(vload_model, main = "Viral Load")
+
+# T-Cell Count
+plot(tcell_model, main = "T-Cell Count")
+
+# Mental QoL
+plot(ment_qol_model, main = "Mental QoL")
+
+# Physical QoL
+plot(phys_qol_model, main = "Physical QoL")
+
+par(mfrow = c(1, 1))
+```
 
 
 
@@ -512,15 +534,12 @@ combined <- left_join(freq_results, bayes_results, by = "Outcome")
 # Table
 combined %>%
   kbl(col.names = c("Outcome", "β", "95% CI", "Posterior Mean", "95% HPDI"),
-      align = c("l", "r", "r", "r", "r"),
-      caption = "Comparison of Frequentist and Bayesian Estimates for Hard Drug Use") %>%
+      align = c("l", "r", "r", "r", "r")) %>%
   kable_classic(full_width = FALSE) %>%
   add_header_above(c(" " = 1, "Frequentist" = 2, "Bayesian" = 2)) %>%
-  footnote(general = "CI = Confidence Interval; HPDI = Highest Posterior Density Interval")
+  footnote(general = "Recall Viral Load was log10 transformed", footnote_as_chunk = TRUE)
 
 ```
-
-
 
 
 
@@ -548,36 +567,6 @@ ment_qol_model_adh <- lm(AGG_MENT_Y2 ~ AGG_MENT_B + age_B + bmi_B + race_B + edu
 # Model for Physical QOL Score
 phys_qol_model_adh <- lm(AGG_PHYS_Y2 ~ AGG_PHYS_B + age_B + bmi_B + race_B + education_B + hard_drugs_B + smoking_B + income_B + adherence_Y2, 
                      data = hiv_data)
-
-```
-
-
-```{r, echo = F}
-# Creating table for report of estimates and corresponding relevant information for hard_drugs_B in all models with and without adherence
-results <- bind_rows(
-  tidy(vload_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load", Adherence = "Without"),
-  tidy(tcell_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count", Adherence = "Without"),
-  tidy(ment_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL", Adherence = "Without"),
-  tidy(phys_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL", Adherence = "Without"),
-  tidy(vload_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load", Adherence = "With"),
-  tidy(tcell_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count", Adherence = "With"),
-  tidy(ment_qol_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL", Adherence = "With"),
-  tidy(phys_qol_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL", Adherence = "With")
-) %>%
-  mutate(
-    Beta = round(estimate, 2),
-    CI = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")"),
-    `p-value` = ifelse(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))
-  ) %>%
-  select(Outcome, Beta, CI, `p-value`)
-
-
-results %>%
-  kbl(col.names = c("Outcome", "β", "95% CI", "p-value"),
-      align = c("l", "r", "r", "r")) %>%
-  kable_classic(full_width = FALSE) %>%
-  pack_rows("Without Adherence", 1, 4) %>%
-  pack_rows("With Adherence", 5, 8)
 
 ```
 
@@ -823,31 +812,49 @@ for (model_name in c("vload", "tcell", "ment_qol", "phys_qol")) {
 
 
 ```{r, echo = F}
-# Creating table for report of estimates and corresponding relevant information for hard_drugs_B in all models with and without adherence
-# Extract hard_drugs_B (beta[7]) from each posterior summary
-results_bayes <- bind_rows(
-  posterior_summary_vload %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load", Adherence = "Without"),
-  posterior_summary_tcell %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count", Adherence = "Without"),
-  posterior_summary_ment_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL", Adherence = "Without"),
-  posterior_summary_phys_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL", Adherence = "Without"),
-  posterior_summary_vload_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load", Adherence = "With"),
-  posterior_summary_tcell_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count", Adherence = "With"),
-  posterior_summary_ment_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL", Adherence = "With"),
-  posterior_summary_phys_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL", Adherence = "With")
-) %>%
-  mutate(
-    Beta = round(Estimate, 2),
-    CI = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")"),
-  ) %>%
-  select(Outcome, Beta, CI)
+# Creating table for results from all models with and without adherence
+# Frequentist Results
+combined_adh <- bind_rows(tidy(vload_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load", Group = "Without Adherence"),
+                          tidy(tcell_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count", Group = "Without Adherence"),
+                          tidy(ment_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL", Group = "Without Adherence"),
+                          tidy(phys_qol_model, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL", Group = "Without Adherence"),
+                          tidy(vload_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Viral Load", Group = "With Adherence"),
+                          tidy(tcell_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "T-Cell Count", Group = "With Adherence"),
+                          tidy(ment_qol_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Mental QoL", Group = "With Adherence"),
+                          tidy(phys_qol_model_adh, conf.int = TRUE) %>% filter(term == "hard_drugs_B") %>% mutate(Outcome = "Physical QoL", Group = "With Adherence")) %>%
+  mutate(Beta = round(estimate, 2),
+         CI_freq = paste0("(", round(conf.low, 2), ", ", round(conf.high, 2), ")"),
+         pval = ifelse(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))) %>%
+  select(Outcome, Beta, CI_freq, pval)
 
-results_bayes %>%
-  kbl(col.names = c("Outcome", "Posterior Mean", "95% HPDI"),
-      align = c("l", "r", "r")) %>%
+# Bayesian Results
+bayes_adh <- bind_rows(posterior_summary_vload %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load"),
+                       posterior_summary_tcell %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count"),
+                       posterior_summary_ment_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL"),
+                       posterior_summary_phys_qol %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL"),
+                       posterior_summary_vload_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Viral Load"),
+                       posterior_summary_tcell_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "T-Cell Count"),
+                       posterior_summary_ment_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Mental QoL"),
+                       posterior_summary_phys_qol_adh %>% filter(Parameter == "beta[7]") %>% mutate(Outcome = "Physical QoL")) %>%
+  mutate(Post_Mean = round(Estimate, 2),
+         CI_bayes = paste0("(", round(HPDI_2.5, 2), ", ", round(HPDI_97.5, 2), ")")) %>%
+  select(Outcome, Post_Mean, CI_bayes)
+
+
+final_table <- bind_cols(combined_adh, bayes_adh %>% select(-Outcome))
+
+# Create table
+final_table %>%
+  kbl(col.names = c("Outcome", "β", "95% CI", "p-value", "Posterior Mean", "95% HPDI"),
+      align = c("l", "r", "r", "r", "r", "r"),
+      caption = "Effect of Baseline Hard Drug Use on Year 2 Treatment Outcomes by Adherence Status") %>%
   kable_classic(full_width = FALSE) %>%
+  add_header_above(c(" " = 1, "Frequentist" = 3, "Bayesian" = 2)) %>%
   pack_rows("Without Adherence", 1, 4) %>%
-  pack_rows("With Adherence", 5, 8)
-
+  pack_rows("With Adherence", 5, 8) %>%
+  footnote(general = "Viral load was log10 transformed prior to analysis. CI = Confidence Interval; HPDI = Highest Posterior Density Interval",
+           general_title = "",
+           footnote_as_chunk = TRUE)
 
 ```
 
