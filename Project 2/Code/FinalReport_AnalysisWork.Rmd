@@ -10,19 +10,23 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 
 library(knitr)
+library(here)
 
 ```
 
 
 Outcomes of Interest:
     Changes in Cognitive Function from baseline to year 1; CVLT Total Correct, CVLT Recognition, Benson Figure, MST, Story Recall
-    Changes in Cortical Thickness from baseline to year 1
+    Changes in Brain Structure from baseline to year 1; Cortical Thickness
 
 Primary Predictor of Interest:
     Peripheral Inflammatory Markers: Cytokine Levels & Chemokine Levels
     
 Adjusting Covariates:
     Outcomes at baseline
+    Age
+    Sex
+    APOE Genotype
     
 
 Other Notes:
@@ -31,8 +35,57 @@ Other Notes:
     - Bonferoni correction is too conservation due to known correlations, also don't recommend FDR correction
     - Don't forget correlation calculations
     - Sample Size = aMCI group and healthy control group = 125 + 50 = 175
+    - Write power analysis in past tense
+    - Discuss how you go from the data collected by the investigator to the final data set and how that impact of the difference will be assessed
     
     
+
+
+```{r, echo = F}
+# Loading preliminary dataset
+prelim_data <- read.csv(here("Project 2/Data", "PrelimData.csv"))
+
+```
+
+
+```{r, echo = F}
+## Correlation Calculations
+
+# Defining predictors and outcomes in preliminary data
+cytokine <- prelim_data$IL_6
+chemokine <- prelim_data$MCP_1
+cvlt_change <- prelim_data$CVLT_CNG3
+cort_thickness_change <- prelim_data$CORT_CNG3
+
+# Defining function to calculate various correlations
+calculate_correlation <- function(label, x, y){
+  test <- cor.test(x, y, use = "complete.obs")
+  data.frame(Comparison = label,
+             r = round(test$estimate, 3),
+             CI_lower = round(test$conf.int[1], 3),
+             CI_upper = round(test$conf.int[2], 3),
+             p_value = round(test$p.value, 4),
+             n = sum(complete.cases(x,y)))
+}
+
+
+# Calculating Correlations
+correlations <- rbind(calculate_correlation("Cytokine ~ Chemokine", cytokine, chemokine),                     # Correlation between the two predictors
+                      calculate_correlation("CVLT ~ Cortical Thickness", cvlt_change, cort_thickness_change), # Correlation between the two outcomes
+                      calculate_correlation("Cytokine ~ CVLT", cytokine, cvlt_change),
+                      calculate_correlation("Cytokine ~ Cortical Thickness", cytokine, cort_thickness_change),
+                      calculate_correlation("Chemokine ~ CVLT", chemokine, cvlt_change),
+                      calculate_correlation("Chemokine ~ Cortical Thickness", chemokine, cort_thickness_change))
+
+kable(correlations, row.names = FALSE)
+
+# Due to the high correlation of the two predictors (> 0.7), they should be modeled separately
+
+```
+    
+
+
+
 
 
 
