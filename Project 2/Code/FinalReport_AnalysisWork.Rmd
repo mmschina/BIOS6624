@@ -1,0 +1,38 @@
+---
+title: "Project 2 Final Report - Analysis Work"
+author: "Madelynn Schina"
+date: "March 2026"
+output: pdf_document
+---
+
+
+```{r, include=F} 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+
+```
+
+
+Outcomes of Interest:
+    Changes in Cognitive Function from baseline to year 1; CVLT Total Correct, CVLT Recognition, Benson Figure, MST, Story Recall
+    Changes in Cortical Thickness from baseline to year 1
+
+Primary Predictor of Interest:
+    Peripheral Inflammatory Markers: Cytokine Levels & Chemokine Levels
+    
+Adjusting Covariates:
+    Outcomes at baseline
+    
+
+Other Notes:
+    - Will be analyzing the aMCI and health control groups together
+    - Goal is to have at least 80% power
+    - Bonferoni correction is too conservation due to known correlations, also don't recommend FDR correction
+    - Don't forget correlation calculations
+    - Sample Size = aMCI group and healthy control group = 125 + 50 = 175
+    
+    
+
+
+
