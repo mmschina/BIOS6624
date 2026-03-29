@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(knitr)
 library(here)
+library(ggcorrplot)
 
 ```
 
@@ -79,12 +80,32 @@ correlations <- rbind(calculate_correlation("Cytokine ~ Chemokine", cytokine, ch
 
 kable(correlations, row.names = FALSE)
 
-# Due to the high correlation of the two predictors (> 0.7), they should be modeled separately
+
+
+# Visualizing Correlations
+cor_matrix <- cor(prelim_data, use = "pairwise.complete.obs")
+rownames(cor_matrix) <- colnames(cor_matrix) <- c("CVLT Test", "Cortical Thickness", "Cytokine", "Chemokine")
+
+ggcorrplot(cor_matrix,
+           method = "circle",
+           type = "lower",
+           lab = TRUE,
+           lab_size = 4,
+           colors = c("cornflowerblue", "white", "darkolivegreen2"),
+           title = "Correlation Matrix",
+           ggtheme = theme_minimal())
 
 ```
     
 
 
+
+
+```{r, echo = F}
+
+
+
+```
 
 
 
