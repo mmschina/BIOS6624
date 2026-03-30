@@ -13,6 +13,7 @@ library(knitr)
 library(here)
 library(ggcorrplot)
 library(powertools)
+library(ggplot2)
 
 ```
 
@@ -109,7 +110,7 @@ ggcorrplot(cor_matrix,
 # Correlation Values - range from 0.2 to 0.7 based on preliminary data
 r_vals <- seq(0.2, 0.7, by = 0.05)
 
-# Alpha Values - 2 models for 2 aims with 1 predictor of interset each, 6 outcomes, 24 models total
+# Alpha Values - 2 models for 2 aims with 1 predictor of interest each, 6 outcomes, 24 models total
 alpha_levels <- c(0.05/4, 0.05/6, 0.05/24)
 
 # Sample size - 175 as defined in grant
@@ -133,22 +134,101 @@ for (i in alpha_levels){
 }
 
 # Finding MDE
+r_search <- seq(0.2, 0.7, by = 0.01)
+
 for (i in alpha_levels) {
   
   # Calculate power for each r value
-  power_search <- sapply(r_vals, function(r) {
+  power_search <- sapply(r_search, function(r) {
     corr.1samp(N = N, rhoA  = r, alpha = i, sides = 2)
   })
   
-  # Find the r value closest to 80% power
-  mde <- r_vals[which.min(abs(power_search - 0.80))]
+  # Find the smallest effect size with a power of at least 80%
+  valid <- r_search[power_search >= 0.80]
+  
+  mde <- if (length(valid) > 0) 
+    {min(valid)} 
+  else {NA}
   
   aim1_mde <- rbind(aim1_mde, data.frame(alpha = i,
                                          min_rhoA = round(mde, 3)))}
 
 
 
+
+## Aim 2
+# Correlation Values - range from 0.2 to 0.7 based on preliminary data
+r_vals <- seq(0.2, 0.7, by = 0.05)
+
+# Alpha Values - 2 models for 2 aims with 1 predictor of interest each, 6 outcomes, 24 models total
+alpha_levels <- c(0.05/4, 0.05/6, 0.05/24)
+
+# Sample size - 175 as defined in grant, potential amyloid positive group 
+N <- 175
+N_pos <- c(25, 56, 88, 120, 150)
+
+# Initializing results
+aim2_results <- data.frame()
+aim2_mde <- data.frame()
+
+# Calculating powers
+for (N_pos in N_pos){
+  
+  # Calculate negative amyloid group sie
+  N_neg = N - N_pos
+  
+  # Calculating ratio of the two amyloid groups (postive/negative)
+  N_ratio = N_pos / N_neg
+  
+  for (rho_p in r_vals){
+    for(rho_n in r_vals){
+      
+      if(rho_p > rho_n){
+        
+        rho_diff <- rho_p - rho_n
+        
+        for (i in alpha_levels){
+          power_val <- corr.2samp(n1 = N_neg, n.ratio = N_ratio, rho1 = rho_n, rho2 = rho_p, alpha = i)
+          
+          aim2_results <- rbind(aim2_results, data.frame(alpha = i,
+                                                         N_pos = N_pos,
+                                                         N_neg = N_neg,
+                                                         Rho_pos = rho_p,
+                                                         Rho_neg = rho_n,
+                                                         Rho_diff = rho_diff,
+                                                         power = power_val))
+        }
+      }
+    }
+  }
+}
+
+
+# Finding MDE
+for (i in alpha_levels) {
+  
+  subset_data <- subset(aim2_results, alpha == i)
+  subset_data <- subset_data[order(subset_data$Rho_diff), ]
+  valid <- subset_data[subset_data$power >= 0.80, ]
+  
+  if (nrow(valid) > 0) {
+    mde <- min(valid$Rho_diff)
+  } else {
+    mde <- NA
+  }
+  
+  aim2_mde <- rbind(aim2_mde,
+                    data.frame(alpha = i,
+                               min_rho_diff = round(mde, 3)))
+}
+
+
+
 ```
+
+
+
+
 
 
 
