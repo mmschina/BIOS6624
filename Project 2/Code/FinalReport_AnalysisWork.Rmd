@@ -14,6 +14,9 @@ library(here)
 library(ggcorrplot)
 library(powertools)
 library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(kableExtra)
 
 ```
 
@@ -86,15 +89,15 @@ kable(correlations, row.names = FALSE)
 
 # Visualizing Correlations
 cor_matrix <- cor(prelim_data, use = "pairwise.complete.obs")
-rownames(cor_matrix) <- colnames(cor_matrix) <- c("CVLT Test", "Cortical Thickness", "Cytokine", "Chemokine")
+rownames(cor_matrix) <- colnames(cor_matrix) <- c("Change in CVLT Test", "Change in Cortical Thickness", "Baseline IL-6", "Baseline MCP-1")
 
 ggcorrplot(cor_matrix,
            method = "circle",
            type = "lower",
            lab = TRUE,
            lab_size = 4,
-           colors = c("cornflowerblue", "white", "darkolivegreen2"),
-           title = "Correlation Matrix",
+           colors = c("brown2", "white", "cornflowerblue"),
+           title = "Correlation Matrix of Preliminary Data",
            ggtheme = theme_minimal())
 
 ```
@@ -228,6 +231,55 @@ for(n in N_pos_vals){
 
 ```
 
+
+```{r, echo = F}
+# Organizing tables of results for power analysis to make report worthy
+
+## Aim 1
+# Reshape results to wide format
+aim1_wide <- aim1_results %>%
+  mutate(power = paste0(round(power * 100, 1), "%"),
+         alpha_label = case_when(alpha == 0.05/4  ~ "α = 0.05/4",
+                                 alpha == 0.05/6  ~ "α = 0.05/6",
+                                 alpha == 0.05/24 ~ "α = 0.05/24")) %>%
+  select(r, alpha_label, power) %>%
+  pivot_wider(names_from  = alpha_label,
+              values_from = power)
+
+# Create table
+kable(aim1_wide,
+      col.names = c("r", "α = 0.05/4", "α = 0.05/6", "α = 0.05/24"),
+      align = "c",
+      caption = "Aim 1: Statistical Power by Effect Size and Significance Level (N = 175)") %>%
+  add_header_above(c(" " = 1, "Significance Level" = 3)) %>%
+  column_spec(1, width = "3cm") %>%
+  column_spec(2:4, width = "4cm") %>%
+  kable_styling(bootstrap_options = c("striped", "bordered"), full_width = FALSE)
+
+
+## Aim 2
+# Prepare aim 2 wide format
+# Filter to N_pos values that achieved 80% power
+aim2_mde_display <- aim2_mde |>
+  filter(!is.na(min_rho_diff)) |>
+  mutate(
+    group_label = paste0(N_pos, "/", N_neg),
+    alpha_label = case_when(
+      alpha == 0.05/4  ~ "α = 0.05/4",
+      alpha == 0.05/6  ~ "α = 0.05/6",
+      alpha == 0.05/24 ~ "α = 0.05/24"
+    ))
+
+kable(aim2_mde_display |> select(group_label, alpha_label, min_rho_diff),
+      col.names = c("Group Size (N+/N-)", "Significance Level", 
+                    "Min Detectable r Difference"),
+      align     = "c",
+      caption   = "Aim 2: Minimum detectable difference in correlations at 80% power by amyloid group size and significance level (N = 175)") |>
+  kable_styling(bootstrap_options = c("striped", "bordered"),
+                full_width        = FALSE)
+
+
+```
 
 
 ```{r, echo = F}
