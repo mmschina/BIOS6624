@@ -1,0 +1,68 @@
+---
+title: "Project 3 - Data Analysis Plan"
+author: "Madelynn Schina"
+date: "April 2026"
+output: pdf_document
+---
+
+
+```{r, include=F} 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(here)
+
+
+```
+
+
+```{r, echo = F}
+# Loading dataset
+frmgham_data <- read.csv(here("Project 3/Data", "frmgham2.csv"))
+
+```
+
+
+
+
+Variables of Interest: 10-year survival for ages 40, 50, & 60 for each group; average survival with no risk factors and with each and all risk factors (also add one additional interesting profile) (3 age groups, 5 risk scenarios)
+Absolutely include: diabetes indicator, systolic blood pressure, age
+Potential Covariates to Ttest before inclusion: presence of coronary heart disease, on blood pressure medicine or not, smoking status, total cholesterol, bmi
+
+
+
+Notes from Class:
+- Separate models for each sex
+- Look into correlation between blood pressure and blood pressure meds
+- Will need to check the covariates for extreme/unreasonable values during data cleaning
+- If stroke variable is 1 at first visit, that means they had a stroke previously (not interested in them, remove them)
+- Only interested in data for first 10 years, exclude data that is from after 10 years
+- Censor anyone that has an event besides stroke and consider anything that happened outside of the 10 years to be censored
+- For the secondary question, we are interested in do diabetes and blood pressure change over time; look only at period no 10 year cutoff
+- Could potentially have different covariates in male vs. female models or the same, just need to be able to explain/justify why you do it either way (can directly compare sexes if covariates are the same, cannot directly compare if covariates vary; cannot address differences in effects/collinearity if you keep them the same)
+- Conduct variable selection for males and females separately and then decide on covariates
+- Complete Case Analysis based on covariates we decide to include, want the most amount of data possible
+- If anyone dies in the 10-years, stroke censoring should be time of death
+- High blood pressure - >160
+- Main goal is comparisons within sexes, not extremely interested in comparisons between/across sexes
+- Look at proportional hazards assumptions being met (one sentence in report, plots in appendix)
+- To get baseline risks: average continuous variables to get high and low risk, groups should be self-explanatory (not on bp meds is high risk)
+
+
+
+
+
+```{r, echo = F}
+# Removing visits after period 1 and keeping baseline predictors
+
+
+# Censoring strokes taking place after 10 years
+
+
+```
+
+
+
+
+
+
