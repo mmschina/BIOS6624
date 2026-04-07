@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 library(knitr)
 library(here)
+library(tidyverse)
+library(gtsummary)
 
 
 ```
@@ -53,13 +55,65 @@ Notes from Class:
 
 
 ```{r, echo = F}
-# Removing visits after period 1 and keeping baseline predictors
+# Checking stroke variable to ensure everyone has one value like we expect
+stroke_consistency_check <- frmgham_data %>%
+  group_by(RANDID) %>%
+  summarise(n_unique_stroke_values = n_distinct(STROKE)) %>%
+  filter(n_unique_stroke_values > 1)
+
+# Removing anyone that reported stroke at baseline as it thus took place before the study
+frmgham_data_clean <- frmgham_data %>%
+  filter(!(RANDID %in% (
+    frmgham_data %>%
+      filter(STROKE == 1 & TIMESTRK == 0) %>%
+      pull(RANDID)
+  )))
+
+# Getting number of removed
+n_baseline_stroke <- frmgham_data %>%
+  filter(STROKE == 1 & TIMESTRK == 0) %>%
+  distinct(RANDID) %>%
+  nrow()
 
 
-# Censoring strokes taking place after 10 years
+# Censoring stroke and death at 10 years
+# stroke_10yr: indicator of if stroke occurred before 10 years and before death
+# stroke_time: if stroke occurred then stroke time, if death occurred before stroke then death time, otherwise 10 years
+ten_years <- 365.25 * 10
+frmgham_data_subset <- frmgham_data_clean %>%
+  mutate(stroke_10yr = ifelse(STROKE == 1 & TIMESTRK <= ten_years & (is.na(TIMEDTH) | TIMESTRK <= TIMEDTH), 1, 0),
+         stroke_time = case_when(STROKE == 1 & TIMESTRK <= ten_years & (is.na(TIMEDTH) | TIMESTRK <= TIMEDTH) ~ TIMESTRK,
+                                 DEATH == 1 & TIMEDTH <= ten_years ~ TIMEDTH,
+                                 TRUE ~ ten_years))
+
+# Checking that censoring worked as expected
+censor_check <- frmgham_data_subset %>%
+  summarise(n_strokes_after_10yr = sum(stroke_10yr == 1 & stroke_time > ten_years, na.rm = TRUE),
+            max_event_time = max(stroke_time[stroke_10yr == 1], na.rm = TRUE))
+
+# Getting the number of individuals that were censored
+n_censored_stroke <- frmgham_data_clean %>%
+  filter(STROKE == 1 & TIMESTRK > ten_years) %>%
+  distinct(RANDID) %>%
+  nrow()
+
+n_censored_death <- frmgham_data_clean %>%
+  filter(DEATH == 1 & TIMEDTH > ten_years) %>%
+  distinct(RANDID) %>%
+  nrow()
+
+
+# Subsetting censored data to only baseline visits since we are only interested in predictors at baseline
+frmgham_data_subset <- frmgham_data_subset %>%
+  filter(TIME == 0)
+
+# Checking that there are no duplicates after subsetting to just baseline visits
+duplicate_check <- frmgham_data_subset %>%
+  summarise(n_rows = n(),n_ids = n_distinct(RANDID))
 
 
 ```
+
 
 
 
