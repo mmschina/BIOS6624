@@ -13,6 +13,7 @@ library(knitr)
 library(here)
 library(tidyverse)
 library(gtsummary)
+library(gt)
 
 
 ```
@@ -123,7 +124,10 @@ summary_data <- frmgham_data_subset %>%
 
 # Renaming ADH, RACE, EDUCBAS, and SMOKE for table
 summary_data <- summary_data %>%
-  mutate(PREVCHD = factor(PREVCHD,
+  mutate(DIABETES = factor(DIABETES,
+                           levels = c(0,1),
+                           labels = c("No", "Yes")),
+         PREVCHD = factor(PREVCHD,
                           levels = c(0,1),
                           labels = c("Free of Disease",
                                      "Prevalent Disease")),
@@ -134,7 +138,10 @@ summary_data <- summary_data %>%
          CURSMOKE = factor(CURSMOKE,
                            levels = c(0,1),
                            labels = c("Not Current Smoker",
-                                      "Current Smoker")))
+                                      "Current Smoker")),
+         stroke_10yr = factor(stroke_10yr,
+                              levels = c(0,1),
+                              labels = c("No Stroke", "Stroke")))
 
 
 male_summary_data   <- summary_data %>% 
@@ -150,6 +157,7 @@ female_summary_data <- summary_data %>%
 male_descriptive_table <- tbl_summary(male_summary_data,
                                  by = stroke_10yr,
                                  missing = "ifany",
+                                 type = list(DIABETES ~ "categorical"),
                                  statistic = list(all_continuous() ~ "{mean} ({sd})",
                                                   all_categorical() ~ "{n} ({p}%)"),
                                  label = list(DIABETES ~ "Diabetes",
@@ -164,9 +172,10 @@ male_descriptive_table <- tbl_summary(male_summary_data,
   modify_table_body(~ .x %>%
                       dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label)))
 
-female_descriptive_table <- tbl_summary(male_summary_data,
+female_descriptive_table <- tbl_summary(female_summary_data,
                                         by = stroke_10yr,
                                         missing = "ifany",
+                                        type = list(DIABETES ~ "categorical"),
                                         statistic = list(all_continuous() ~ "{mean} ({sd})",
                                                          all_categorical() ~ "{n} ({p}%)"),
                                         label = list(DIABETES ~ "Diabetes",
@@ -184,7 +193,8 @@ female_descriptive_table <- tbl_summary(male_summary_data,
 
 
 # Save table as image for report
-# gtsave(as_gt(descriptive_table), "descriptivetable.png")
+gtsave(as_gt(male_descriptive_table), "male_descriptivetable.png")
+gtsave(as_gt(female_descriptive_table), "female_descriptivetable.png")
 
 
 
