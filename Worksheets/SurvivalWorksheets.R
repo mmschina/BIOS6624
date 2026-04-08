@@ -4,7 +4,7 @@ library(survival)
 library(survminer)
 library(gtsummary)
 
-# Survival Worksheet 1
+## Survival Worksheet 1
 # Loading the data on ovarian cancer
 ov_data <- read.csv(here("Worksheets", "ovarian.csv"))
 
@@ -70,4 +70,46 @@ descriptive_table <- ov_data %>%
 # Cox PH Model
 coxph_model <- coxph(formula = Surv(futime, fustat) ~ rx + age + ecog.ps + resid.ds, data = ov_data)
 summary(coxph_model)
+
+
+
+
+
+
+
+## Survival Worksheet 3
+# Loading the data
+cross_data <- read.csv(here("Worksheets", "CrossData.csv"))
+
+
+# Plotting log-minus-log survival curves
+surv_dig <- survfit(Surv(time, status) ~ group, data = cross_data)
+ggsurvplot(surv_dig, conf.int=F, censor=F, fun="cloglog")
+
+
+# Calculating and plotting Schoenfeld residuals for the group variable
+res.cox1 <- coxph(Surv(time, status)~ group, data = cross_data)
+ph_res <- cox.zph(res.cox1)
+ggcoxzph(ph_res, se=F, var = "group")
+
+
+# Fitting Cox PH Model with group
+coxph_fit_group <- coxph(Surv(time, status) ~ group,
+                   data = cross_data)
+summary(coxph_fit_group)
+
+
+# Fitting Cox PH Model with interaction between group and time
+coxph_fit_interact <- coxph(Surv(time, status) ~ group + tt(group),
+                            data = cross_data,
+                            tt = function(x, t, ...) x * t)
+summary(coxph_fit_interact)
+
+
+# Fitting Cox PH Model with interaction between group and dichotomous time
+coxph_fit_ditime <- coxph(Surv(time, status) ~ group + tt(group),
+                          data = cross_data,
+                          tt = function(x, t, ...) x * ifelse(t >= 1.5, 1, 0))
+summary(coxph_fit_ditime)
+
 
