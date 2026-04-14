@@ -30,7 +30,7 @@ frmgham_data <- read.csv(here("Project 3/Data", "frmgham2.csv"))
 
 Variables of Interest: 10-year survival for ages 40, 50, & 60 for each group; average survival with no risk factors and with each and all risk factors (also add one additional interesting profile) (3 age groups, 5 risk scenarios)
 Absolutely include: diabetes indicator, systolic blood pressure, age
-Potential Covariates to Ttest before inclusion: presence of coronary heart disease, on blood pressure medicine or not, smoking status, total cholesterol, bmi
+Potential Covariates to Test before inclusion: presence of coronary heart disease, on blood pressure medicine or not, smoking status, total cholesterol, bmi
 
 
 

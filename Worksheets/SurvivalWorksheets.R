@@ -162,7 +162,7 @@ ggsurvplot(surv_profiles, data = risk_profiles,
 
 # Survival Curves of two individual patients
 two_patients <- data.frame(rx = c(1, 2),
-                           age = c(60, 55),
+                           age = c(60, 50),
                            resid.ds = c(1, 2),
                            ecog.ps = c(1, 2))
 
@@ -174,8 +174,5 @@ ggsurvplot(surv_patients, data = two_patients,
 
 # Probability of death within 1, 1.5 and 2 years
 summary_times <- summary(surv_patients, times = c(365, 547.5, 730))
-death_probs <- data.frame(Patient = c("Patient 1", "Patient 1", "Patient 1", "Patient 2", "Patient 2", "Patient 2"),
-                          Time = c("1 Year", "1.5 Years", "2 Years", "1 Year", "1.5 Years", "2 Years"),
-                          Prob_Death = round(1 - summary_times$surv, 3))
-death_probs
+1 - summary_times$surv
 
