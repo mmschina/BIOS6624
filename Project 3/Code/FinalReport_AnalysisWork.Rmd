@@ -1,0 +1,206 @@
+---
+title: "Project 3 Final Report - Analysis Work"
+author: "Madelynn Schina"
+date: "April 2026"
+output: pdf_document
+---
+
+
+```{r, include=F} 
+knitr::opts_chunk$set(echo = TRUE)
+
+library(knitr)
+library(here)
+library(survival)
+library(car)
+library(knitr)
+library(kableExtra)
+
+```
+
+
+```{r, echo = F}
+# Loading dataset
+frmgham_data <- read.csv(here("Project 3/Data", "frmgham_data_cleaned.csv"))
+
+# Separating data into male and female
+male_data <- frmgham_data %>%
+  filter(SEX == 1) %>%
+  select(-SEX)
+
+female_data <- frmgham_data %>%
+  filter(SEX == 2) %>%
+  select(-SEX)
+
+```
+
+
+```{r, echo = F}
+# Checking collinearity of predictors before performing variable selection
+cor_test_f <- cor(female_data$SYSBP, as.numeric(female_data$BPMEDS), use = "complete.obs")
+cor_test_m <- cor(male_data$SYSBP, as.numeric(male_data$BPMEDS), use = "complete.obs")
+
+vif_model_f <- lm(stroke_10yr ~ SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI, 
+                  data = female_data)
+vif_model_m <- lm(stroke_10yr ~ SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI, 
+                  data = male_data)
+
+# Everything looks good, no concerns
+
+```
+
+
+
+```{r, echo = F}
+# Variable Selection of additional covariates
+# To Be Considered: coronary heart disease, blood pressure medicine, smoking status, total cholesterol, bmi
+
+run_variable_selection <- function(data, sex_label) {
+  
+  candidates <- c("PREVCHD", "BPMEDS", "CURSMOKE", "TOTCHOL", "BMI")
+  forced     <- c("AGE", "SYSBP", "DIABETES")
+  all_vars   <- c("stroke_time", "stroke_10yr", forced, candidates)
+  
+  # Identify complete cases across all variables for consistent sample size
+  data_complete <- data[complete.cases(data[, all_vars]), ]
+  cat("\n===", sex_label, "- N used for selection:", nrow(data_complete), "===\n")
+  
+  # Generate all 32 subsets of candidates
+  candidate_subsets <- unlist(
+    lapply(0:length(candidates), function(k) combn(candidates, k, simplify = FALSE)),
+    recursive = FALSE
+  )
+  
+  # Fit all models on the same complete dataset
+  fit_model <- function(subset) {
+    vars    <- c(forced, subset)
+    formula <- as.formula(paste("Surv(stroke_time, stroke_10yr) ~", 
+                                paste(vars, collapse = " + ")))
+    coxph(formula, data = data_complete)
+  }
+  
+  models <- lapply(candidate_subsets, fit_model)
+  
+  # Build AIC results table
+  results <- data.frame(
+    variables    = sapply(candidate_subsets, function(x)
+                          ifelse(length(x) == 0, "None (Forced Only)", 
+                                 paste(x, collapse = ", "))),
+    AIC          = round(sapply(models, AIC), 2),
+    n_candidates = sapply(candidate_subsets, length)
+  )
+  
+  results <- results[order(results$AIC), ]
+  results$delta_AIC <- round(results$AIC - min(results$AIC), 2)
+  
+  # Clean simple table
+  aic_table <- results %>%
+    rename(
+      "Additional Covariates" = variables,
+      "No. of Candidates"     = n_candidates,
+      "AIC"                   = AIC,
+      "Delta AIC"             = delta_AIC
+    ) %>%
+    kable(format = "html", row.names = FALSE, align = c("l", "c", "c", "c"),
+          caption = paste("All-Subsets AIC Results —", sex_label)) %>%
+    kable_styling(
+      bootstrap_options = c("striped", "condensed"),
+      full_width        = FALSE,
+      position          = "center",
+      font_size         = 13
+    )
+  
+  # Save as png
+  filename <- paste0("aic_table_", tolower(sex_label), ".png")
+  save_kable(aic_table, file = filename, zoom = 2)
+  cat("\nTable saved as:", filename, "\n")
+  
+  print(aic_table)
+  
+  # LRT: best model vs forced only
+  best_index      <- which.min(sapply(models, AIC))
+  best_candidates <- candidate_subsets[[best_index]]
+  
+  forced_model <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES,
+                         data = data_complete)
+  
+  best_model <- coxph(as.formula(paste("Surv(stroke_time, stroke_10yr) ~",
+                                        paste(c(forced, best_candidates), collapse = " + "))),
+                       data = data_complete)
+  
+  cat("\n===", sex_label, "- LRT: Best Model vs Forced Only ===\n")
+  print(anova(forced_model, best_model))
+  
+  return(list(results       = results, 
+              models        = models, 
+              subsets       = candidate_subsets,
+              data_complete = data_complete,
+              best_model    = best_model,
+              forced_model  = forced_model))
+}
+
+
+# Run for each sex
+results_female <- run_variable_selection(female_data, "Female")
+results_male   <- run_variable_selection(male_data,   "Male")
+
+```
+
+
+
+
+
+
+```{r, echo = F}
+# Creating table 1 for report
+summary_data <- frmgham_data_subset %>%
+  select(SEX, stroke_10yr, DIABETES, SYSBP, AGE, PREVCHD, BPMEDS, CURSMOKE, TOTCHOL, BMI)
+
+# Renaming ADH, RACE, EDUCBAS, and SMOKE for table
+summary_data <- summary_data %>%
+  mutate(DIABETES = factor(DIABETES,
+                           levels = c(0,1),
+                           labels = c("No", "Yes")),
+         PREVCHD = factor(PREVCHD,
+                          levels = c(0,1),
+                          labels = c("Free of Disease",
+                                     "Prevalent Disease")),
+         BPMEDS = factor(BPMEDS,
+                         levels = c(0,1),
+                         labels = c("Not Currently Taken",
+                                    "Currently Taken")),
+         CURSMOKE = factor(CURSMOKE,
+                           levels = c(0,1),
+                           labels = c("Not Current Smoker",
+                                      "Current Smoker")),
+         stroke_10yr = factor(stroke_10yr,
+                              levels = c(0,1),
+                              labels = c("No Stroke", "Stroke")))
+
+
+# Creating summary table
+descriptive_table <- tbl_summary(summary_data,
+                                 by = stroke_10yr,
+                                 missing = "ifany",
+                                 type = list(DIABETES ~ "categorical"),
+                                 statistic = list(all_continuous() ~ "{mean} ({sd})",
+                                                  all_categorical() ~ "{n} ({p}%)"),
+                                 label = list(DIABETES ~ "Diabetes",
+                                              SYSBP ~ "Systolic Blood Pressure (mmHg)",
+                                              AGE ~ "Age (years)",
+                                              PREVCHD ~ "Coronary Heart Disease",
+                                              BPMEDS ~ "Taking Blood Pressure Medication",
+                                              TOTCHOL ~ "Total Cholesterol (mg/dL)",
+                                              CURSMOKE ~ "Smoking Status",
+                                              BMI ~ "BMI (kg/m^2)")) %>%
+  add_overall() %>%
+  modify_table_body(~ .x %>%
+                      dplyr::mutate(label = ifelse(label == "Unknown", "Missing", label)))
+
+# Save table as image for report
+gtsave(as_gt(descriptive_table), "descriptivetable_finalreport.png")
+
+```
+
+
+
