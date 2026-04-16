@@ -13,6 +13,7 @@ library(knitr)
 library(here)
 library(survival)
 library(car)
+library(dplyr)
 library(knitr)
 library(kableExtra)
 
@@ -37,13 +38,17 @@ female_data <- frmgham_data %>%
 
 ```{r, echo = F}
 # Checking collinearity of predictors before performing variable selection
-cor_test_f <- cor(female_data$SYSBP, as.numeric(female_data$BPMEDS), use = "complete.obs")
-cor_test_m <- cor(male_data$SYSBP, as.numeric(male_data$BPMEDS), use = "complete.obs")
+# Female
+cox_vif_f <- coxph(Surv(stroke_time, stroke_10yr) ~ 
+                     SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI,
+                   data = female_data)
+vif(cox_vif_f)
 
-vif_model_f <- lm(stroke_10yr ~ SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI, 
-                  data = female_data)
-vif_model_m <- lm(stroke_10yr ~ SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI, 
-                  data = male_data)
+# Male
+cox_vif_m <- coxph(Surv(stroke_time, stroke_10yr) ~ 
+                     SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI,
+                   data = male_data)
+vif(cox_vif_m)
 
 # Everything looks good, no concerns
 
@@ -53,96 +58,44 @@ vif_model_m <- lm(stroke_10yr ~ SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURS
 
 ```{r, echo = F}
 # Variable Selection of additional covariates
-# To Be Considered: coronary heart disease, blood pressure medicine, smoking status, total cholesterol, bmi
-
-run_variable_selection <- function(data, sex_label) {
-  
-  candidates <- c("PREVCHD", "BPMEDS", "CURSMOKE", "TOTCHOL", "BMI")
-  forced     <- c("AGE", "SYSBP", "DIABETES")
-  all_vars   <- c("stroke_time", "stroke_10yr", forced, candidates)
-  
-  # Identify complete cases across all variables for consistent sample size
-  data_complete <- data[complete.cases(data[, all_vars]), ]
-  cat("\n===", sex_label, "- N used for selection:", nrow(data_complete), "===\n")
-  
-  # Generate all 32 subsets of candidates
-  candidate_subsets <- unlist(
-    lapply(0:length(candidates), function(k) combn(candidates, k, simplify = FALSE)),
-    recursive = FALSE
-  )
-  
-  # Fit all models on the same complete dataset
-  fit_model <- function(subset) {
-    vars    <- c(forced, subset)
-    formula <- as.formula(paste("Surv(stroke_time, stroke_10yr) ~", 
-                                paste(vars, collapse = " + ")))
-    coxph(formula, data = data_complete)
-  }
-  
-  models <- lapply(candidate_subsets, fit_model)
-  
-  # Build AIC results table
-  results <- data.frame(
-    variables    = sapply(candidate_subsets, function(x)
-                          ifelse(length(x) == 0, "None (Forced Only)", 
-                                 paste(x, collapse = ", "))),
-    AIC          = round(sapply(models, AIC), 2),
-    n_candidates = sapply(candidate_subsets, length)
-  )
-  
-  results <- results[order(results$AIC), ]
-  results$delta_AIC <- round(results$AIC - min(results$AIC), 2)
-  
-  # Clean simple table
-  aic_table <- results %>%
-    rename(
-      "Additional Covariates" = variables,
-      "No. of Candidates"     = n_candidates,
-      "AIC"                   = AIC,
-      "Delta AIC"             = delta_AIC
-    ) %>%
-    kable(format = "html", row.names = FALSE, align = c("l", "c", "c", "c"),
-          caption = paste("All-Subsets AIC Results —", sex_label)) %>%
-    kable_styling(
-      bootstrap_options = c("striped", "condensed"),
-      full_width        = FALSE,
-      position          = "center",
-      font_size         = 13
-    )
-  
-  # Save as png
-  filename <- paste0("aic_table_", tolower(sex_label), ".png")
-  save_kable(aic_table, file = filename, zoom = 2)
-  cat("\nTable saved as:", filename, "\n")
-  
-  print(aic_table)
-  
-  # LRT: best model vs forced only
-  best_index      <- which.min(sapply(models, AIC))
-  best_candidates <- candidate_subsets[[best_index]]
-  
-  forced_model <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES,
-                         data = data_complete)
-  
-  best_model <- coxph(as.formula(paste("Surv(stroke_time, stroke_10yr) ~",
-                                        paste(c(forced, best_candidates), collapse = " + "))),
-                       data = data_complete)
-  
-  cat("\n===", sex_label, "- LRT: Best Model vs Forced Only ===\n")
-  print(anova(forced_model, best_model))
-  
-  return(list(results       = results, 
-              models        = models, 
-              subsets       = candidate_subsets,
-              data_complete = data_complete,
-              best_model    = best_model,
-              forced_model  = forced_model))
-}
+# Required Covariates: AGE, SYSBP, DIABETES
+# To Be Considered: BPMEDS, PREVCHD, CURSMOKE, TOTCHOL, BMI
 
 
-# Run for each sex
-results_female <- run_variable_selection(female_data, "Female")
-results_male   <- run_variable_selection(male_data,   "Male")
+# Variables of interest
+vars <- c("stroke_time", "stroke_10yr", "AGE", "SYSBP", "DIABETES", "BPMEDS", "PREVCHD", 
+          "CURSMOKE", "TOTCHOL", "BMI")
+
+# Creating clean complete-cases subsets
+female_data_clean <- female_data[complete.cases(female_data[, vars]), ]
+male_data_clean <- male_data[complete.cases(male_data[, vars]), ]
+
+
+## Females
+# Full model
+cox_full_f <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + BPMEDS + PREVCHD + CURSMOKE + TOTCHOL + BMI,
+                    data = female_data_clean)
+
+# Backward selection by AIC
+cox_step_f <- step(cox_full_f, 
+                   direction = "backward",
+                   scope = list(lower = ~ AGE + SYSBP + DIABETES,
+                                upper = ~ AGE + SYSBP + DIABETES + BPMEDS + PREVCHD + CURSMOKE + TOTCHOL + BMI))
+summary(cox_step_f)
+
+
+## Males
+# Full model
+cox_full_m <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + BPMEDS + PREVCHD + CURSMOKE + TOTCHOL + BMI,
+                    data = male_data_clean)
+
+# Backward selection by AIC
+cox_step_m <- step(cox_full_m, 
+                   direction = "backward",
+                   scope = list(lower = ~ AGE + SYSBP + DIABETES,
+                                upper = ~ AGE + SYSBP + DIABETES + BPMEDS + PREVCHD + CURSMOKE + TOTCHOL + BMI))
+summary(cox_step_m)
+
 
 ```
 
