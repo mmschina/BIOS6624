@@ -1,0 +1,106 @@
+
+
+# Simulation Worksheet 1
+
+# Question 1 - Create 20 simuated datasets from the given linear regression model
+simulate_datasets <- function(n_datasets = 1, N = 100,
+                              beta0 = 1, beta1 = 1, beta2 = 0.5, beta3 = 0.25,
+                              sigma = 1, seed = NULL) {
+  
+  set.seed(seed)
+  
+  sim_list <- vector("list", n_datasets)
+  
+  for (i in 1:n_datasets) {
+    
+    # Predictors
+    X1 <- rbinom(N, 1, 0.5)
+    X2 <- rnorm(N, mean = 39, sd = 5)
+    X3 <- X1 * X2
+    
+    # Error
+    epsilon <- rnorm(N, mean = 0, sd = sigma)
+    
+    # Outcome
+    Y <- beta0 + beta1*X1 + beta2*X2 + beta3*X3 + epsilon
+    
+    # Save results
+    sim_list[[i]] <- data.frame(Y, X1, X2, X3)
+  }
+  
+  return(sim_list)
+}
+
+simulated_datasets <- simulate_datasets(n_datasets = 20, seed = 6624)
+
+
+# Question 2 - Plot Y vs. X2 for each dataset
+library(ggplot2)
+library(dplyr)
+
+# Combining all 20 datasets into one data frame
+combined_data <- bind_rows(simulated_datasets, .id = "dataset") |>
+  mutate(dataset = as.integer(dataset),
+         X1_group = factor(X1, levels = c(0, 1), labels = c("X1 = 0", "X1 = 1")))
+
+# Creating plots
+ggplot(combined_data, aes(x = X2, y = Y, color = X1_group)) +
+  geom_point(alpha = 0.4, size = 0.8) +
+  facet_wrap(~ dataset, ncol = 5) +
+  scale_color_manual(name = "Group", values = c("X1 = 0" = "darkolivegreen1", "X1 = 1" = "darkorchid1")) +
+  labs(title = "Y vs. X2 across 20 simulated datasets",
+       x = "X2",
+       y = "Y") +
+  theme_bw()
+
+
+
+# Question 3 - Summarizing operating characteristics
+true_params <- c(
+  "(Intercept)" = 1,
+  "X1"          = 1,
+  "X2"          = 0.5,
+  "X3"          = 0.25
+)
+
+results_list <- vector("list", length(simulated_datasets))
+
+for (i in 1:length(simulated_datasets)) {
+  
+  fit   <- lm(Y ~ X1 + X2 + X3, data = simulated_datasets[[i]])
+  coefs <- summary(fit)$coefficients
+  cis   <- confint(fit)
+  
+  results_list[[i]] <- data.frame(
+    dataset  = i,
+    term     = rownames(coefs),
+    estimate = coefs[, "Estimate"],
+    lower    = cis[, 1],
+    upper    = cis[, 2],
+    p_value  = coefs[, "Pr(>|t|)"]
+  )
+}
+
+results_df <- bind_rows(results_list)
+
+operating_chars <- results_df |>
+  mutate(
+    true_value = true_params[term],
+    covers     = lower < true_value & true_value < upper,
+    reject     = p_value < 0.05
+  ) |>
+  group_by(term) |>
+  summarise(
+    true_value = first(true_value),
+    mean_est   = mean(estimate),
+    bias       = mean(estimate) - first(true_value),
+    coverage   = mean(covers),
+    power      = mean(reject),
+    .groups    = "drop"
+  )
+
+print(operating_chars)
+
+
+
+
