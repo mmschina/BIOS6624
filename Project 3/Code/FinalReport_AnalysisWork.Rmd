@@ -289,7 +289,48 @@ gtsave(as_gt(descriptive_table), "descriptivetable_finalreport.png")
 
 ```{r, echo = F}
 # Secondary Analysis
+# Loading original dataset that is not subset to only look at 10 years
+frmgham_data_sa <- read.csv(here("Project 3/Data", "frmgham2.csv"))
 
+```
+
+```{r, echo = F}
+# Summarize SYSBP and DIABETES by sex and period
+summary_table <- frmgham_data_sa %>%
+  group_by(SEX, PERIOD) %>%
+  summarise(SYSBP_mean = round(mean(SYSBP, na.rm = TRUE), 1),
+            SYSBP_sd   = round(sd(SYSBP, na.rm = TRUE), 1),
+            Diabetes_pct = round(mean(DIABETES, na.rm = TRUE) * 100, 1),
+            .groups = "drop") %>%
+  mutate(SYSBP_fmt    = paste0(SYSBP_mean, " (", SYSBP_sd, ")"),
+         Diabetes_fmt = paste0(Diabetes_pct, "%"))
+
+# Reshape to wide format (one column per period)
+table_wide <- data.frame(
+  Variable = rep(c("SYSBP", "Diabetes"), 2),
+  Sex = rep(c("Female", "Male"), each = 2),
+  Period1 = c(summary_table$SYSBP_fmt[summary_table$SEX == 1 & summary_table$PERIOD == 1],
+              summary_table$Diabetes_fmt[summary_table$SEX == 1 & summary_table$PERIOD == 1],
+              summary_table$SYSBP_fmt[summary_table$SEX == 2 & summary_table$PERIOD == 1],
+              summary_table$Diabetes_fmt[summary_table$SEX == 2 & summary_table$PERIOD == 1]),
+  Period2 = c(summary_table$SYSBP_fmt[summary_table$SEX == 1 & summary_table$PERIOD == 2],
+              summary_table$Diabetes_fmt[summary_table$SEX == 1 & summary_table$PERIOD == 2],
+              summary_table$SYSBP_fmt[summary_table$SEX == 2 & summary_table$PERIOD == 2],
+              summary_table$Diabetes_fmt[summary_table$SEX == 2 & summary_table$PERIOD == 2]),
+  Period3 = c(summary_table$SYSBP_fmt[summary_table$SEX == 1 & summary_table$PERIOD == 3],
+              summary_table$Diabetes_fmt[summary_table$SEX == 1 & summary_table$PERIOD == 3],
+              summary_table$SYSBP_fmt[summary_table$SEX == 2 & summary_table$PERIOD == 3],
+              summary_table$Diabetes_fmt[summary_table$SEX == 2 & summary_table$PERIOD == 3]))
+
+# Build kable
+kable(table_wide[, c("Variable", "Period1", "Period2", "Period3")],
+      col.names = c("", "Period 1", "Period 2", "Period 3"),
+      caption = "SYSBP and Diabetes Status Across Time Periods by Sex") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  pack_rows("Female", 1, 2) %>%
+  pack_rows("Male", 3, 4) %>%
+  column_spec(1:4, width = "2.5cm")
 
 ```
 
