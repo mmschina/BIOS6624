@@ -157,54 +157,65 @@ ggcoxzph(ph_test_m)
 
 ```{r, echo = F}
 # Risk Profile Assessments
-# Female profiles (no CURSMOKE in the model)
-female_profiles <- data.frame(AGE = c(40, 50, 60, 40, 50, 60, 40, 50, 60),
-                              SYSBP = c(110, 110, 110, 160, 160, 160, 160, 160, 160),
-                              DIABETES = c(0, 0, 0, 1, 1, 1, 0, 0, 0),
-                              profile  = rep(c("No Risk Factors", "All Risk Factors", "High SYSBP Only"), each = 3))
+#### Female Profiles ####
+# Defining profiles
+female_profiles <- data.frame(AGE = rep(c(40, 50, 60), 4),
+                              SYSBP = rep(c(110, 160, 160, 110), each = 3),
+                              DIABETES = rep(c(0, 1, 0, 1), each = 3))
 
-# Male profiles (includes CURSMOKE in the model)
-male_profiles <- data.frame(AGE = c(40, 50, 60, 40, 50, 60, 40, 50, 60),
-                            SYSBP = c(110, 110, 110, 160, 160, 160, 160, 160, 160),
-                            DIABETES = c(0, 0, 0, 1, 1, 1, 0, 0, 0),
-                            CURSMOKE = c(0, 0, 0, 1, 1, 1, 0, 0, 0),
-                            profile  = rep(c("No Risk Factors", "All Risk Factors", "High SYSBP Only"), each = 3))
-
-# Get predicted survival
+# Fitting model to profiles of interest
 surv_f <- survfit(cox_final_f, newdata = female_profiles)
-surv_m <- survfit(cox_final_m, newdata = male_profiles)
 
-# Extract 10-year survival probabilities
-summary(surv_f, times = 3650)
-summary(surv_m, times = 3650)
+# Getting 10-year survival probabilities for each profile
+surv_f_10yr <- as.vector(summary(surv_f, times = 3652.5)$surv)
 
-
-# Organizing results into nice table for report
-# Extracting 10-year survival probabilities
-surv_f_10yr <- summary(surv_f, times = 3650)$surv
-surv_m_10yr <- summary(surv_m, times = 3650)$surv
-
-# Building results as data frame
-risk_table_wide <- data.frame(Age = c(40, 50, 60),
-                              NoRisk_F = round(as.vector(surv_f_10yr)[1:3], 3),
-                              NoRisk_M = round(as.vector(surv_m_10yr)[1:3], 3),
-                              AllRisk_F = round(as.vector(surv_f_10yr)[4:6], 3),
-                              AllRisk_M = round(as.vector(surv_m_10yr)[4:6], 3),
-                              HighBP_F  = round(as.vector(surv_f_10yr)[7:9], 3),
-                              HighBP_M  = round(as.vector(surv_m_10yr)[7:9], 3))
+# Formatting results
+risk_table_f <- data.frame(Age = c(40, 50, 60),
+                           NoRisk_F = round(surv_f_10yr[1:3], 3),
+                           AllRisk_F = round(surv_f_10yr[4:6], 3),
+                           HighSYSBP_F = round(surv_f_10yr[7:9], 3),
+                           Diabetes_F = round(surv_f_10yr[10:12], 3))
 
 # Creating table
-kable(risk_table_wide,
-      col.names = c("Age", "Female", "Male", "Female", "Male", "Female", "Male"),
-      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile") %>%
+kable(risk_table_f,
+      col.names = c("Age", "No Risk Factors", "All Risk Factors", "High SYSBP Only", "Diabetes Only"),
+      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile for Females") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                full_width = FALSE) %>%
-  add_header_above(c(" " = 1, 
-                     "No Risk Factors" = 2, 
-                     "All Risk Factors" = 2, 
-                     "High SYSBP Only" = 2)) %>%
-  column_spec(1:7, width = "2cm")
+                full_width = FALSE)
 
+
+
+#### Male Profiles ####
+# Defining profiles
+male_profiles <- data.frame(AGE = rep(c(40, 50, 60), 8),
+                            SYSBP = rep(c(110, 160, 160, 110, 110, 160, 160, 110), each = 3),
+                            DIABETES = rep(c(0, 1, 0, 1, 0, 1, 0, 1), each = 3),
+                            CURSMOKE = rep(c(0, 1, 0, 0, 1, 0, 1, 1), each = 3))
+
+# Fitting model to profiles of interest
+surv_m <- survfit(cox_final_m, newdata = male_profiles)
+
+# Getting 10-year survival probabilities for each profile
+surv_m_10yr <- as.vector(summary(surv_m, times = 3650)$surv)
+
+# Formatting results
+risk_table_m <- data.frame(Age = c(40, 50, 60),
+                           NoRisk = round(surv_m_10yr[1:3], 3),
+                           AllRisk = round(surv_m_10yr[4:6], 3),
+                           HighSYSBP = round(surv_m_10yr[7:9], 3),
+                           Diabetes = round(surv_m_10yr[10:12], 3),
+                           Smoker = round(surv_m_10yr[13:15], 3),
+                           SYSBP_Diab = round(surv_m_10yr[16:18], 3),
+                           SYSBP_Smok = round(surv_m_10yr[19:21], 3),
+                           Diab_Smok = round(surv_m_10yr[22:24], 3))
+
+# Creating table
+kable(risk_table_m,
+      col.names = c("Age", "No Risk Factors", "All Risk Factors", "High SYSBP Only", "Diabetes Only", 
+                    "Smoker Only", "High SYSBP + Diabetes", "High SYSBP + Smoker", "Diabetes + Smoker"),
+      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile for Males") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
 
 ```
 
@@ -271,5 +282,15 @@ gtsave(as_gt(descriptive_table), "descriptivetable_finalreport.png")
 
 
 
+
+
+
+
+
+```{r, echo = F}
+# Secondary Analysis
+
+
+```
 
 
