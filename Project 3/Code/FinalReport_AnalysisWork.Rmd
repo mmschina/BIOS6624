@@ -12,10 +12,13 @@ knitr::opts_chunk$set(echo = TRUE)
 library(knitr)
 library(here)
 library(survival)
+library(survminer)
 library(car)
 library(dplyr)
 library(knitr)
 library(kableExtra)
+library(gtsummary)
+library(gt)
 
 ```
 
@@ -97,6 +100,112 @@ cox_step_m <- step(cox_full_m,
 summary(cox_step_m)
 
 
+# By backwards selection using AIC, the female model will include none of the five suggested covariates and the male model will include smoking status
+
+```
+
+
+```{r, echo = F}
+# Kaplan Meier Plots
+km_f <- survfit(Surv(stroke_time, stroke_10yr) ~ 1, data = female_data_cleaned)
+ggsurvplot(km_f, data = female_data_clean,
+           conf.int = TRUE,
+           ylim = c(0.95, 1),
+           title = "Kaplan-Meier: Stroke-Free Survival (Female)")
+
+km_m <- survfit(Surv(stroke_time, stroke_10yr) ~ 1, data = male_data_cleaned)
+ggsurvplot(km_m, data = male_data_clean,
+           conf.int = TRUE,
+           ylim = c(0.95, 1),
+           title = "Kaplan-Meier: Stroke-Free Survival (Male)")
+
+```
+
+
+
+```{r, echo = F}
+# Now that we have completed variable selection, we will redo complete case analysis to maximize the number of patients included
+# Female final model variables: AGE, SYSBP, DIABETES
+vars_f <- c("stroke_time", "stroke_10yr", "AGE", "SYSBP", "DIABETES")
+female_data_cleaned <- female_data[complete.cases(female_data[, vars_f]), ]
+
+# Male final model variables: AGE, SYSBP, DIABETES, CURSMOKE
+vars_m <- c("stroke_time", "stroke_10yr", "AGE", "SYSBP", "DIABETES", "CURSMOKE")
+male_data_cleaned <- male_data[complete.cases(male_data[, vars_m]), ]
+
+
+# Fitting Cox PH Models
+cox_final_f <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES,
+                     data = female_data_cleaned)
+
+cox_final_m <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + CURSMOKE,
+                     data = male_data_cleaned)
+
+
+
+# Figures to check proportional hazards assumptions
+ph_test_f <- cox.zph(cox_final_f)
+ggcoxzph(ph_test_f)
+
+ph_test_m <- cox.zph(cox_final_m)
+ggcoxzph(ph_test_m)
+
+```
+
+
+
+
+```{r, echo = F}
+# Risk Profile Assessments
+# Female profiles (no CURSMOKE in the model)
+female_profiles <- data.frame(AGE = c(40, 50, 60, 40, 50, 60, 40, 50, 60),
+                              SYSBP = c(110, 110, 110, 160, 160, 160, 160, 160, 160),
+                              DIABETES = c(0, 0, 0, 1, 1, 1, 0, 0, 0),
+                              profile  = rep(c("No Risk Factors", "All Risk Factors", "High SYSBP Only"), each = 3))
+
+# Male profiles (includes CURSMOKE in the model)
+male_profiles <- data.frame(AGE = c(40, 50, 60, 40, 50, 60, 40, 50, 60),
+                            SYSBP = c(110, 110, 110, 160, 160, 160, 160, 160, 160),
+                            DIABETES = c(0, 0, 0, 1, 1, 1, 0, 0, 0),
+                            CURSMOKE = c(0, 0, 0, 1, 1, 1, 0, 0, 0),
+                            profile  = rep(c("No Risk Factors", "All Risk Factors", "High SYSBP Only"), each = 3))
+
+# Get predicted survival
+surv_f <- survfit(cox_final_f, newdata = female_profiles)
+surv_m <- survfit(cox_final_m, newdata = male_profiles)
+
+# Extract 10-year survival probabilities
+summary(surv_f, times = 3650)
+summary(surv_m, times = 3650)
+
+
+# Organizing results into nice table for report
+# Extracting 10-year survival probabilities
+surv_f_10yr <- summary(surv_f, times = 3650)$surv
+surv_m_10yr <- summary(surv_m, times = 3650)$surv
+
+# Building results as data frame
+risk_table_wide <- data.frame(Age = c(40, 50, 60),
+                              NoRisk_F = round(as.vector(surv_f_10yr)[1:3], 3),
+                              NoRisk_M = round(as.vector(surv_m_10yr)[1:3], 3),
+                              AllRisk_F = round(as.vector(surv_f_10yr)[4:6], 3),
+                              AllRisk_M = round(as.vector(surv_m_10yr)[4:6], 3),
+                              HighBP_F  = round(as.vector(surv_f_10yr)[7:9], 3),
+                              HighBP_M  = round(as.vector(surv_m_10yr)[7:9], 3))
+
+# Creating table
+kable(risk_table_wide,
+      col.names = c("Age", "Female", "Male", "Female", "Male", "Female", "Male"),
+      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  add_header_above(c(" " = 1, 
+                     "No Risk Factors" = 2, 
+                     "All Risk Factors" = 2, 
+                     "High SYSBP Only" = 2)) %>%
+  column_spec(1:7, width = "2cm")
+
+
 ```
 
 
@@ -106,12 +215,15 @@ summary(cox_step_m)
 
 ```{r, echo = F}
 # Creating table 1 for report
-summary_data <- frmgham_data_subset %>%
+summary_data <- frmgham_data %>%
   select(SEX, stroke_10yr, DIABETES, SYSBP, AGE, PREVCHD, BPMEDS, CURSMOKE, TOTCHOL, BMI)
 
 # Renaming ADH, RACE, EDUCBAS, and SMOKE for table
 summary_data <- summary_data %>%
-  mutate(DIABETES = factor(DIABETES,
+  mutate(SEX = factor(SEX,
+                      levels = c(1,2),
+                      labels = c("Males", "Females")),
+         DIABETES = factor(DIABETES,
                            levels = c(0,1),
                            labels = c("No", "Yes")),
          PREVCHD = factor(PREVCHD,
@@ -128,17 +240,18 @@ summary_data <- summary_data %>%
                                       "Current Smoker")),
          stroke_10yr = factor(stroke_10yr,
                               levels = c(0,1),
-                              labels = c("No Stroke", "Stroke")))
+                              labels = c("No", "Yes")))
 
 
 # Creating summary table
 descriptive_table <- tbl_summary(summary_data,
-                                 by = stroke_10yr,
+                                 by = SEX,
                                  missing = "ifany",
                                  type = list(DIABETES ~ "categorical"),
                                  statistic = list(all_continuous() ~ "{mean} ({sd})",
                                                   all_categorical() ~ "{n} ({p}%)"),
-                                 label = list(DIABETES ~ "Diabetes",
+                                 label = list(stroke_10yr ~ "Stroke within 10 Years",
+                                              DIABETES ~ "Diabetes",
                                               SYSBP ~ "Systolic Blood Pressure (mmHg)",
                                               AGE ~ "Age (years)",
                                               PREVCHD ~ "Coronary Heart Disease",
@@ -154,6 +267,9 @@ descriptive_table <- tbl_summary(summary_data,
 gtsave(as_gt(descriptive_table), "descriptivetable_finalreport.png")
 
 ```
+
+
+
 
 
 
