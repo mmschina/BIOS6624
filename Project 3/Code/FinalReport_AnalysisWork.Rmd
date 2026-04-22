@@ -19,6 +19,7 @@ library(knitr)
 library(kableExtra)
 library(gtsummary)
 library(gt)
+library(gridExtra)
 
 ```
 
@@ -37,6 +38,89 @@ female_data <- frmgham_data %>%
   select(-SEX)
 
 ```
+
+
+```{r, echo = F, warning = FALSE}
+# Exploratory Kaplan Meier Plots
+
+# Calculate means
+age_mean_f     <- mean(female_data_clean$AGE, na.rm = TRUE)
+totchol_mean_f <- mean(female_data_clean$TOTCHOL, na.rm = TRUE)
+bmi_mean_f     <- mean(female_data_clean$BMI, na.rm = TRUE)
+
+age_mean_m     <- mean(male_data_clean$AGE, na.rm = TRUE)
+totchol_mean_m <- mean(male_data_clean$TOTCHOL, na.rm = TRUE)
+bmi_mean_m     <- mean(male_data_clean$BMI, na.rm = TRUE)
+
+# Dichotomize using sex-specific means
+female_data_clean <- female_data_clean %>%
+  mutate(AGE_cat = ifelse(AGE < age_mean_f, 
+                          paste0("< ", round(age_mean_f, 1)), 
+                          paste0("≥ ", round(age_mean_f, 1))),
+         SYSBP_cat = ifelse(SYSBP < 160, "< 160", "≥ 160"),
+         TOTCHOL_cat = ifelse(TOTCHOL < totchol_mean_f, 
+                              paste0("< ", round(totchol_mean_f, 1)), 
+                              paste0("≥ ", round(totchol_mean_f, 1))),
+         BMI_cat = ifelse(BMI < bmi_mean_f, 
+                          paste0("< ", round(bmi_mean_f, 1)), 
+                          paste0("≥ ", round(bmi_mean_f, 1))))
+
+male_data_clean <- male_data_clean %>%
+  mutate(AGE_cat = ifelse(AGE < age_mean_m, 
+                          paste0("< ", round(age_mean_m, 1)), 
+                          paste0("≥ ", round(age_mean_m, 1))),
+         SYSBP_cat = ifelse(SYSBP < 160, "< 160", "≥ 160"),
+         TOTCHOL_cat = ifelse(TOTCHOL < totchol_mean_m, 
+                              paste0("< ", round(totchol_mean_m, 1)), 
+                              paste0("≥ ", round(totchol_mean_m, 1))),
+         BMI_cat = ifelse(BMI < bmi_mean_m, 
+                          paste0("< ", round(bmi_mean_m, 1)), 
+                          paste0("≥ ", round(bmi_mean_m, 1))))
+
+# Creating function to make KM plots
+km_plot <- function(data, var, label) {
+  data$group <- data[[var]]
+  fit <- survfit(Surv(stroke_time, stroke_10yr) ~ group, data = data)
+  ggsurvplot(fit, data = data,
+             conf.int = TRUE,
+             ylim = c(0.90, 1),
+             legend.title = label,
+             legend.labs = levels(factor(data$group)),
+             palette = c("cornflowerblue", "darkolivegreen2"),
+             xlab = "Days",
+             ylab = "Stroke-Free Survival",
+             ggtheme = theme_minimal())$plot}
+
+
+# Female Plots
+plots_f <- list(km_plot(female_data_clean, "AGE_cat",     "Age"),
+                km_plot(female_data_clean, "SYSBP_cat",   "SYSBP"),
+                km_plot(female_data_clean, "DIABETES",    "Diabetes"),
+                km_plot(female_data_clean, "BPMEDS",      "BP Meds"),
+                km_plot(female_data_clean, "PREVCHD",     "Prev CHD"),
+                km_plot(female_data_clean, "CURSMOKE",    "Smoking"),
+                km_plot(female_data_clean, "TOTCHOL_cat", "Total Cholesterol"),
+                km_plot(female_data_clean, "BMI_cat",     "BMI"))
+
+# Male Plots
+plots_m <- list(km_plot(male_data_clean, "AGE_cat",     "Age"),
+                km_plot(male_data_clean, "SYSBP_cat",   "SYSBP"),
+                km_plot(male_data_clean, "DIABETES",    "Diabetes"),
+                km_plot(male_data_clean, "BPMEDS",      "BP Meds"),
+                km_plot(male_data_clean, "PREVCHD",     "Prev CHD"),
+                km_plot(male_data_clean, "CURSMOKE",    "Smoking"),
+                km_plot(male_data_clean, "TOTCHOL_cat", "Total Cholesterol"),
+                km_plot(male_data_clean, "BMI_cat",     "BMI"))
+
+
+gridExtra::grid.arrange(grobs = plots_f, ncol = 4,
+                        top = "Kaplan-Meier Curves by Covariate (Female)")
+gridExtra::grid.arrange(grobs = plots_m, ncol = 4,
+                        top = "Kaplan-Meier Curves by Covariate (Male)")
+
+```
+
+
 
 
 ```{r, echo = F}
@@ -105,28 +189,12 @@ summary(cox_step_m)
 ```
 
 
-```{r, echo = F}
-# Kaplan Meier Plots
-km_f <- survfit(Surv(stroke_time, stroke_10yr) ~ 1, data = female_data_cleaned)
-ggsurvplot(km_f, data = female_data_clean,
-           conf.int = TRUE,
-           ylim = c(0.95, 1),
-           title = "Kaplan-Meier: Stroke-Free Survival (Female)")
-
-km_m <- survfit(Surv(stroke_time, stroke_10yr) ~ 1, data = male_data_cleaned)
-ggsurvplot(km_m, data = male_data_clean,
-           conf.int = TRUE,
-           ylim = c(0.95, 1),
-           title = "Kaplan-Meier: Stroke-Free Survival (Male)")
-
-```
-
 
 
 ```{r, echo = F}
 # Now that we have completed variable selection, we will redo complete case analysis to maximize the number of patients included
 # Female final model variables: AGE, SYSBP, DIABETES
-vars_f <- c("stroke_time", "stroke_10yr", "AGE", "SYSBP", "DIABETES")
+vars_f <- c("stroke_time", "stroke_10yr", "AGE", "SYSBP", "DIABETES", "CURSMOKE")
 female_data_cleaned <- female_data[complete.cases(female_data[, vars_f]), ]
 
 # Male final model variables: AGE, SYSBP, DIABETES, CURSMOKE
@@ -135,7 +203,7 @@ male_data_cleaned <- male_data[complete.cases(male_data[, vars_m]), ]
 
 
 # Fitting Cox PH Models
-cox_final_f <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES,
+cox_final_f <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + CURSMOKE,
                      data = female_data_cleaned)
 
 cox_final_m <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + CURSMOKE,
@@ -157,65 +225,56 @@ ggcoxzph(ph_test_m)
 
 ```{r, echo = F}
 # Risk Profile Assessments
-#### Female Profiles ####
 # Defining profiles
-female_profiles <- data.frame(AGE = rep(c(40, 50, 60), 4),
-                              SYSBP = rep(c(110, 160, 160, 110), each = 3),
-                              DIABETES = rep(c(0, 1, 0, 1), each = 3))
+# Profile order: Healthy, High BP, Diabetes, High BP + Diabetes, Smoker
+profiles <- data.frame(AGE = rep(c(40, 50, 60), 5),
+                       SYSBP = rep(c(110, 160, 110, 160, 110), each = 3),
+                       DIABETES = rep(c(0, 0, 1, 1, 0), each = 3),
+                       CURSMOKE = rep(c(0, 0, 0, 0, 1), each = 3))
 
+#### Female Profiles ####
 # Fitting model to profiles of interest
-surv_f <- survfit(cox_final_f, newdata = female_profiles)
+surv_f <- survfit(cox_final_f, newdata = profiles)
 
 # Getting 10-year survival probabilities for each profile
 surv_f_10yr <- as.vector(summary(surv_f, times = 3652.5)$surv)
 
 # Formatting results
 risk_table_f <- data.frame(Age = c(40, 50, 60),
-                           NoRisk_F = round(surv_f_10yr[1:3], 3),
-                           AllRisk_F = round(surv_f_10yr[4:6], 3),
-                           HighSYSBP_F = round(surv_f_10yr[7:9], 3),
-                           Diabetes_F = round(surv_f_10yr[10:12], 3))
-
-# Creating table
-kable(risk_table_f,
-      col.names = c("Age", "No Risk Factors", "All Risk Factors", "High SYSBP Only", "Diabetes Only"),
-      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile for Females") %>%
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                full_width = FALSE)
-
+                           Healthy = round(surv_f_10yr[1:3], 3),
+                           HighBP = round(surv_f_10yr[4:6], 3),
+                           Diabetes = round(surv_f_10yr[7:9], 3),
+                           BP_Diab = round(surv_f_10yr[10:12], 3),
+                           Smoker = round(surv_f_10yr[13:15], 3))
 
 
 #### Male Profiles ####
-# Defining profiles
-male_profiles <- data.frame(AGE = rep(c(40, 50, 60), 8),
-                            SYSBP = rep(c(110, 160, 160, 110, 110, 160, 160, 110), each = 3),
-                            DIABETES = rep(c(0, 1, 0, 1, 0, 1, 0, 1), each = 3),
-                            CURSMOKE = rep(c(0, 1, 0, 0, 1, 0, 1, 1), each = 3))
-
 # Fitting model to profiles of interest
-surv_m <- survfit(cox_final_m, newdata = male_profiles)
+surv_m <- survfit(cox_final_m, newdata = profiles)
 
 # Getting 10-year survival probabilities for each profile
-surv_m_10yr <- as.vector(summary(surv_m, times = 3650)$surv)
+surv_m_10yr <- as.vector(summary(surv_m, times = 3652.5)$surv)
 
 # Formatting results
 risk_table_m <- data.frame(Age = c(40, 50, 60),
-                           NoRisk = round(surv_m_10yr[1:3], 3),
-                           AllRisk = round(surv_m_10yr[4:6], 3),
-                           HighSYSBP = round(surv_m_10yr[7:9], 3),
-                           Diabetes = round(surv_m_10yr[10:12], 3),
-                           Smoker = round(surv_m_10yr[13:15], 3),
-                           SYSBP_Diab = round(surv_m_10yr[16:18], 3),
-                           SYSBP_Smok = round(surv_m_10yr[19:21], 3),
-                           Diab_Smok = round(surv_m_10yr[22:24], 3))
+                           Healthy  = round(surv_m_10yr[1:3], 3),
+                           HighBP = round(surv_m_10yr[4:6], 3),
+                           Diabetes = round(surv_m_10yr[7:9], 3),
+                           BP_Diab = round(surv_m_10yr[10:12], 3),
+                           Smoker = round(surv_m_10yr[13:15], 3))
 
-# Creating table
-kable(risk_table_m,
-      col.names = c("Age", "No Risk Factors", "All Risk Factors", "High SYSBP Only", "Diabetes Only", 
-                    "Smoker Only", "High SYSBP + Diabetes", "High SYSBP + Smoker", "Diabetes + Smoker"),
-      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile for Males") %>%
+# Combine male and female tables
+risk_table_combined <- rbind(risk_table_f, risk_table_m)
+
+# Combined table with pack_rows for sex subheaders
+kable(risk_table_combined,
+      col.names = c("Age", "Healthy", "High BP", 
+                    "Diabetes", "High BP + Diabetes", "Smoker"),
+      caption = "10-Year Stroke-Free Survival Probabilities by Risk Profile") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
-                full_width = FALSE)
+                full_width = FALSE) %>%
+  pack_rows("Female", 1, 3) %>%
+  pack_rows("Male", 4, 6)
 
 ```
 
