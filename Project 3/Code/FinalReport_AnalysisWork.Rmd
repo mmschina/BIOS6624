@@ -20,6 +20,7 @@ library(kableExtra)
 library(gtsummary)
 library(gt)
 library(gridExtra)
+library(broom)
 
 ```
 
@@ -44,16 +45,16 @@ female_data <- frmgham_data %>%
 # Exploratory Kaplan Meier Plots
 
 # Calculate means
-age_mean_f     <- mean(female_data_clean$AGE, na.rm = TRUE)
-totchol_mean_f <- mean(female_data_clean$TOTCHOL, na.rm = TRUE)
-bmi_mean_f     <- mean(female_data_clean$BMI, na.rm = TRUE)
+age_mean_f     <- mean(female_data$AGE, na.rm = TRUE)
+totchol_mean_f <- mean(female_data$TOTCHOL, na.rm = TRUE)
+bmi_mean_f     <- mean(female_data$BMI, na.rm = TRUE)
 
-age_mean_m     <- mean(male_data_clean$AGE, na.rm = TRUE)
-totchol_mean_m <- mean(male_data_clean$TOTCHOL, na.rm = TRUE)
-bmi_mean_m     <- mean(male_data_clean$BMI, na.rm = TRUE)
+age_mean_m     <- mean(male_data$AGE, na.rm = TRUE)
+totchol_mean_m <- mean(male_data$TOTCHOL, na.rm = TRUE)
+bmi_mean_m     <- mean(male_data$BMI, na.rm = TRUE)
 
 # Dichotomize using sex-specific means
-female_data_clean <- female_data_clean %>%
+female_data_clean <- female_data %>%
   mutate(AGE_cat = ifelse(AGE < age_mean_f, 
                           paste0("< ", round(age_mean_f, 1)), 
                           paste0("≥ ", round(age_mean_f, 1))),
@@ -65,7 +66,7 @@ female_data_clean <- female_data_clean %>%
                           paste0("< ", round(bmi_mean_f, 1)), 
                           paste0("≥ ", round(bmi_mean_f, 1))))
 
-male_data_clean <- male_data_clean %>%
+male_data_clean <- male_data %>%
   mutate(AGE_cat = ifelse(AGE < age_mean_m, 
                           paste0("< ", round(age_mean_m, 1)), 
                           paste0("≥ ", round(age_mean_m, 1))),
@@ -124,7 +125,7 @@ gridExtra::grid.arrange(grobs = plots_m, ncol = 4,
 
 
 ```{r, echo = F}
-# Checking collinearity of predictors before performing variable selection
+# Checking multicollinearity of predictors before performing variable selection
 # Female
 cox_vif_f <- coxph(Surv(stroke_time, stroke_10yr) ~ 
                      SYSBP + BPMEDS + DIABETES + AGE + PREVCHD + CURSMOKE + TOTCHOL + BMI,
@@ -205,12 +206,41 @@ male_data_cleaned <- male_data[complete.cases(male_data[, vars_m]), ]
 # Fitting Cox PH Models
 cox_final_f <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + CURSMOKE,
                      data = female_data_cleaned)
+summary(cox_final_f)
 
 cox_final_m <- coxph(Surv(stroke_time, stroke_10yr) ~ AGE + SYSBP + DIABETES + CURSMOKE,
                      data = male_data_cleaned)
+summary(cox_final_m)
 
 
+# Creating table to summarize model results
+f_tidy <- tidy(cox_final_f, exponentiate = TRUE, conf.int = TRUE)
+m_tidy <- tidy(cox_final_m, exponentiate = TRUE, conf.int = TRUE)
 
+format_p <- function(p) {ifelse(p < 0.001, "<0.001", round(p, 3))}
+
+
+model_table <- data.frame(Predictor = c("Age", "Systolic Blood Pressure", "Diabetes", "Current Smoker"),
+                          HR_f = round(f_tidy$estimate, 3),
+                          CI_f = paste0("(", round(f_tidy$conf.low, 3), ", ", round(f_tidy$conf.high, 3), ")"),
+                          P_f  = format_p(f_tidy$p.value),
+                          HR_m = round(m_tidy$estimate, 3),
+                          CI_m = paste0("(", round(m_tidy$conf.low, 3), ", ", round(m_tidy$conf.high, 3), ")"),
+                          P_m  = format_p(m_tidy$p.value))
+
+kable(model_table,
+      format = "html",
+      col.names = c("Predictor", "HR", "95% CI", "p-value", "HR", "95% CI", "p-value"),
+      caption = "Cox Proportional Hazards Model Results") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  add_header_above(c(" " = 1,
+                     "Female" = 3,
+                     "Male" = 3))
+
+```
+
+```{r, echo = F}
 # Figures to check proportional hazards assumptions
 ph_test_f <- cox.zph(cox_final_f)
 ggcoxzph(ph_test_f)
@@ -392,5 +422,25 @@ kable(table_wide[, c("Variable", "Period1", "Period2", "Period3")],
   column_spec(1:4, width = "2.5cm")
 
 ```
+
+```{r, echo = F}
+# Getting proportion of patients with clinically meaningful changes in BP or diabetes over the three time periods
+individual_changes <- frmgham_data_sa %>%
+  group_by(RANDID) %>%
+  summarise(SYSBP_min    = min(SYSBP, na.rm = TRUE),
+            SYSBP_max    = max(SYSBP, na.rm = TRUE),
+            DIAB_min     = min(DIABETES, na.rm = TRUE),
+            DIAB_max     = max(DIABETES, na.rm = TRUE)) %>%
+  mutate(SYSBP_change = SYSBP_max - SYSBP_min,
+         meaningful_SYSBP  = SYSBP_change >= 10,
+         meaningful_DIAB   = DIAB_max != DIAB_min
+  )
+
+# Proportion with meaningful changes
+mean(individual_changes$meaningful_SYSBP, na.rm = TRUE) * 100
+mean(individual_changes$meaningful_DIAB, na.rm = TRUE) * 100
+
+```
+
 
 
