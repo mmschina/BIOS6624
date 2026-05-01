@@ -1,6 +1,6 @@
 
 
-# Simulation Worksheet 1
+#### Simulation Worksheet 1 ####
 
 # Question 1 - Create 20 simuated datasets from the given linear regression model
 simulate_datasets <- function(n_datasets = 1, N = 100,
@@ -105,7 +105,7 @@ print(operating_chars)
 
 
 
-# Simulation Worksheet 2
+#### Simulation Worksheet 2 ####
 library(hdrm)
 library(corrplot)
 
@@ -267,6 +267,37 @@ SNR <- R2 / (1 - R2)
 cat("R^2 =", R2, "\n")
 cat("SNR =", SNR, "\n")
 
+
+
+
+#### Simulation Worksheet 3 ####
+# Question 3 - Collider Effect
+# Function to simulate dataset with collider
+simulate_collider <- function(n = 1000) {
+  # Exposure (X)
+  x <- rnorm(n)
+  
+  # Outcome (Y) - independent of X
+  y <- rnorm(n)
+  
+  # Collider (Z) - caused by BOTH X and Y
+  z <- 0.7*x + 0.7*y + rnorm(n)
+  
+  data.frame(x = x, y = y, z = z)
+}
+
+# Fitting models with and without the collider
+set.seed(6624)
+dat <- simulate_collider(10000)
+
+# Model without collider
+model_no_collider <- lm(y ~ x, data = dat)
+
+# Model with collider
+model_with_collider <- lm(y ~ x + z, data = dat)
+
+summary(model_no_collider)
+summary(model_with_collider)
 
 
 

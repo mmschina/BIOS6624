@@ -1,0 +1,199 @@
+---
+title: "Variable Selection and Correlation"
+author: "Carter Sevick"
+date: "2026-04-26"
+output: html_document
+---
+ 
+ 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(MASS)
+library(ISLR)
+library(tidyverse)
+
+# Example data from the ISLR package
+Hitters = na.omit(Hitters)
+
+```
+
+```{r}
+
+# this is an explanatory function and is not guaranteed to work with all cases
+# Example: only works with numeric variables
+
+ 
+
+back_select <- function(data, vars, outcome, crit = 0.15) {
+  
+  tvars <- vars
+  
+  for(i in 1:length(tvars)){
+    
+    tfit <- lm(as.formula(paste(outcome, '~', paste(tvars, collapse='+'))), data = data)
+
+    parms <- as.data.frame(summary(tfit)$coefficients) 
+    parms <- within(parms, {
+               parm <- row.names(parms)
+             }) |> 
+      base::subset(parm != '(Intercept)' )
+    # get row with largest p-value
+    parms <- parms[max(parms$`Pr(>|t|)`) == parms$`Pr(>|t|)`, ]
+    
+    # test against critical value
+    parms <- parms[parms$`Pr(>|t|)` > crit, ]
+    
+    # what to do?
+    if(nrow(parms) > 1) {
+      message('Error: more than one variable selected for exclusion')
+      message(parms)
+    } else if(nrow(parms) == 1) {
+        message(paste('Step'
+                  , as.character(i)
+                  ,': ',parms$parm
+                  , 'has been excluded from the model: p-value = '
+                  , as.character(round(parms$`Pr(>|t|)`, 4))))
+      
+      # remove variable with highest p-value, if above the crit threshold
+      tvars <- setdiff(tvars, parms$parm)
+      
+      # check if all variables have been excluded
+      if(length(tvars) == 0 ) {
+        message(paste('Step'
+                    , as.character(i)
+                    ,': No variables selected into the model'))
+        break
+      }
+    } else {
+      message(paste('Step'
+                  , as.character(i)
+                  ,': Selection complete'
+                  ,'final model:'
+                  ,paste(tvars, collapse = ', ')
+      ))
+      break
+    } 
+  }
+  
+  if(length(tvars > 0)) {return(tvars)} else {return(character(0))}
+}
+
+```
+
+Backward selection example
+```{r}
+back_select(Hitters,
+c('AtBat','Hits','HmRun','Runs','RBI','Walks','Years','CAtBat','CHits','CHmRun','CRuns','CRBI','CWalks',
+'PutOuts','Assists','Errors')
+,'Salary')
+```
+
+
+Simulation data of a normal outcome allowing multiple predictors, possibly correlated
+```{r}
+sim_dat <- function( n = 189 # size of each simulation dataset
+                     , B = c(-1.0871, 0.7041, 0)# true model parameters
+                     , cov_mu = c(0, 0)  # means of x variables
+                     , cov_var = diag(2) # covariance matrix of X variables
+                     , e_var = 1
+                     ) {
+  
+  # add generation of multiple, possibly correlated variables using the multivariate normal distribution 
+  x <- MASS::mvrnorm(n=n, mu = cov_mu, Sigma = cov_var)
+
+  x_matrix <- cbind(intercept = rep(1, n), x)
+  
+  v = as.vector(x_matrix %*% B)
+  y = sapply(v, function(x){rnorm(1, mean = x, sd = sqrt(e_var))})
+  
+  simdat <- as.data.frame(cbind(y, x))
+  vnames <- c('y',paste0('x',1:length(cov_mu)))
+  names(simdat) <- vnames
+  
+  return(simdat)
+}
+dat = sim_dat()
+
+summary(lm(y~x1+x2, data = dat))
+```
+
+```{r}
+
+back_select(sim_dat(), c('x1','x2'), 'y')
+
+```
+ 
+ 
+two equally strong predictors, uncorrelated
+```{r}
+nsim <- 10000
+res <- rep(NA, nsim)
+res2 <- list()
+for(i in 1:nsim) {
+dat <- sim_dat(B = c(-1, 0.5, 0.5), cov_mu=c(0,0), cov_var = matrix(c(1, 0, 0, 1), 2, 2), e_var = 4)
+tmp <-
+  suppressMessages(
+    back_select(dat
+            , c('x1','x2')
+            , 'y'
+            )
+    )
+  res[i] <- length(tmp)
+  res2[[i]] <- tmp
+}
+table(res)/length(res)
+```
+
+two equally strong predictors, CORRELATED!!!
+
+```{r}
+nsim <- 10000
+res <- rep(NA, nsim)
+res2 <- list()
+for(i in 1:nsim) {
+dat <- sim_dat(B = c(-1, 0.5, 0.5), cov_mu=c(0,0), cov_var = matrix(c(1, 0.75, 0.75, 1), 2, 2), e_var = 4)
+tmp <-
+  suppressMessages(
+    back_select(dat
+            , c('x1','x2')
+            , 'y'
+            )
+    )
+  res[i] <- length(tmp)
+  res2[[i]] <- tmp
+}
+table(res)/length(res)
+```
+
+
+```{r}
+nsim <- 10000
+res <- rep(NA, nsim)
+res2 <- list()
+coef_x1 <- rep(NA, nsim)  # ADD THIS
+
+for(i in 1:nsim) {
+  dat <- sim_dat(B = c(-1, 0.5, 0.5), cov_mu=c(0,0), 
+                 cov_var = matrix(c(1, 0.75, 0.75, 1), 2, 2), e_var = 4)
+  
+  tmp <- suppressMessages(back_select(dat, c('x1','x2'), 'y'))
+  res[i] <- length(tmp)
+  res2[[i]] <- tmp
+  
+  # ADD THIS: fit model with selected variables and grab x1 coefficient
+  if("x1" %in% tmp) {
+    fit <- lm(as.formula(paste("y ~", paste(tmp, collapse = "+"))), data = dat)
+    coef_x1[i] <- coef(fit)["x1"]
+  }
+}
+
+table(res)/length(res)
+
+# Bias: split x1 estimates by whether x2 was also selected or not
+mean(coef_x1[res == 2], na.rm = TRUE)  # x1 estimate when BOTH variables kept
+mean(coef_x1[res == 1], na.rm = TRUE)  # x1 estimate when x2 was DROPPED
+
+
+```
+ 
