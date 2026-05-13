@@ -3,10 +3,8 @@
 ## May 2026
 
 ###########################################################
-# The following code contains a function defined to run the 
-# variable selection simulations required for this project
-# and a second function to summarize the results of the 
-# simulations
+# The following code is defined to run the variable 
+# selection simulations required for this project
 ###########################################################
 
 
@@ -191,20 +189,6 @@ simfunc <- function(n, rho = 0) {
   return(rbind(pval_res, AIC_res, BIC_res, lasso_min_res, lasso_1se_res, enet_min_res, enet_1se_res))
   
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
