@@ -15,43 +15,41 @@ library(purrr)
 library(stringr)
 library(kableExtra)
 library(tidyr)
+library(ggplot2)
 
 ```
 
 
 
 ```{r, echo = F}
-#### Reading and Combining Results Across Simulations ####
-files <- list.files(path = "Project 4/Data", pattern = "\\.rds$", full.names = TRUE)
+files <- list.files(path = file.path(getwd(), "..", "Data"), 
+                    pattern = "\\.rds$", 
+                    full.names = TRUE)
 
 all_results <- map_dfr(files, function(f){
-  data <- readRDS(f)
+  dat <- readRDS(f)
   
-  # Extract filename only
   fname <- basename(f)
   
-  # Pull simulation number
-  sim_id <- str_extract(fname, "\\d{3}(?=\\.rds)") %>%
+  sim_id <- str_extract(fname, "(?<=_)\\d+(?=\\.rds)") %>%
     as.numeric()
   
-  # Pull n
   n_val <- str_extract(fname, "(?<=sim_n)\\d+") %>%
     as.numeric()
   
-  # Pull rho
   rho_val <- str_extract(fname, "(?<=rho)\\d+") %>%
     as.numeric() / 100
   
-  data$sim_id <- sim_id
-  data$file_n <- n_val
-  data$file_rho <- rho_val
+  dat$sim_id <- sim_id
+  dat$file_n <- n_val
+  dat$file_rho <- rho_val
   
-  data
+  dat
 })
 
-
-# Sanity check of results
-# 20 variables x 7 methods x 1000 sims = 140000 results for each sample size and each correlation value
+# Sanity check
+# 20 variables x 7 methods x 1000 sims x 6 conditions = 840,000 rows
+nrow(all_results)
 table(all_results$file_n, all_results$file_rho)
 
 ```
@@ -83,14 +81,38 @@ confusion_wide <- confusion_summary %>%
   select(-n)
 
 confusion_wide %>%
-  kable(booktabs = TRUE,
-        digits = 1,
-        align = "lcccccccccccc",
+  kable(booktabs = TRUE, digits = 1, align = "lcccccccccccc",
         col.names = c("Method", "TPR", "FNR", "FPR", "TNR", "TPR", "FNR", "FPR", "TNR", "TPR", "FNR", "FPR", "TNR")) %>%
   add_header_above(c(" " = 1, "$\\rho$ = 0" = 4, "$\\rho$ = 0.35" = 4, "$\\rho$ = 0.70" = 4 )) %>%
   kable_styling(full_width = FALSE, position = "center", latex_options = c("hold_position", "striped")) %>%
   pack_rows("n = 250", 1, 7) %>%
   pack_rows("n = 500", 8, 14)
+
+
+# Visualization of TPR for significant variables
+per_var_tpr <- all_results %>%
+  filter(true_non_zero == 1) %>%
+  group_by(method, n, rho, variables) %>%
+  summarise(TPR = mean(selected), .groups = "drop") %>%
+  mutate(method = factor(method, levels = c("PVAL", "AIC", "BIC", "LASSO_min", "LASSO_1se", "ENET_min", "ENET_1se")),
+         rho_label = paste0("rho = ", rho),
+         n_label = paste0("n = ", n))
+
+ggplot(per_var_tpr, aes(x = variables, y = TPR, fill = method)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.75) +
+  facet_grid(n_label ~ rho_label) +
+  labs(title = "True Positive Rate by Variable",
+       subtitle = "X1-X5 ordered by increasing coefficient size (1/6 to 5/6)",
+       x = "Variable",
+       y = "True Positive Rate",
+       fill = "Method") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(limits = c(0, 1), labels = scales::percent) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold"),
+        panel.spacing = unit(1.2, "lines"),
+        legend.position = "bottom")
 
 ```
 
@@ -99,86 +121,55 @@ confusion_wide %>%
 
 ```{r, echo = F}
 # Bias and Coverage of Variables Selected
-
 bias_data <- all_results %>%
   mutate(bias = estimate - true_values)
 
 true_table <- bias_data %>%
   filter(true_non_zero == 1) %>%
   group_by(method, n, rho, variables) %>%
-  summarise(
-    bias = mean(bias[selected == 1], na.rm = TRUE),
-    coverage = mean(covered[selected == 1], na.rm = TRUE),
-    selected_rate = mean(selected),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    cell = case_when(
-      selected_rate == 0 ~ "-",
-      is.nan(bias) ~ "-",
-      TRUE ~ paste0(round(bias, 3), " (", round(coverage, 2), ")")
-    ),
-    n_rho = paste0("rho = ", rho)
-  ) %>%
+  summarise(bias = mean(bias[selected == 1], na.rm = TRUE),
+            coverage = mean(covered[selected == 1], na.rm = TRUE),
+            selected_rate = mean(selected),
+            .groups = "drop") %>%
+  mutate(cell = case_when(selected_rate == 0 ~ "-", is.nan(bias) ~ "-", TRUE ~ paste0(round(bias, 3), " (", round(coverage, 2), ")")),
+         n_rho = paste0("rho = ", rho)) %>%
   select(method, n, n_rho, variables, cell) %>%
-  pivot_wider(
-    names_from = c(n, n_rho),
-    values_from = cell
-  )
+  pivot_wider(names_from = c(n, n_rho),
+              values_from = cell)
+
+method_counts <- table(true_table$method)
 
 true_table %>%
-  kable(
-    booktabs = TRUE,
-    caption = "Bias (Coverage) for True Predictors (X1–X5)",
-    align = "lcccccc"
-  ) %>%
-  add_header_above(c(
-    " " = 2,
-    "n = 250" = 3,
-    "n = 500" = 3
-  )) %>%
+  select(-method) %>%
+  kable(booktabs = TRUE, caption = "Bias (Coverage) for True Predictors (X1–X5)", align = "lcccccc",
+        col.names = c("Variable", "$\\rho$ = 0", "$\\rho$ = 0.35", "$\\rho$ = 0.70", "$\\rho$ = 0", "$\\rho$ = 0.35", "$\\rho$ = 0.70")) %>%
+  add_header_above(c(" " = 1, "n = 250" = 3, "n = 500" = 3)) %>%
   kable_styling(full_width = FALSE) %>%
-  pack_rows(index = table(true_table$method))
+  pack_rows(index = method_counts)
 
 
 false_table <- bias_data %>%
   filter(true_non_zero == 0) %>%
   group_by(method, n, rho, variables) %>%
-  summarise(
-    bias = mean(bias[selected == 1], na.rm = TRUE),
-    coverage = mean(covered[selected == 1], na.rm = TRUE),
-    selected_rate = mean(selected),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    cell = ifelse(
-      selected_rate == 0,
-      "-",
-      paste0(round(bias, 3), " (", round(coverage, 2), ")")
-    ),
-    n_rho = paste0("rho = ", rho)
-  ) %>%
+  summarise(bias = mean(bias[selected == 1], na.rm = TRUE),
+            coverage = mean(covered[selected == 1], na.rm = TRUE),
+            selected_rate = mean(selected),
+            .groups = "drop") %>%
+  mutate(cell = ifelse(selected_rate == 0,"-", paste0(round(bias, 3), " (", round(coverage, 2), ")")),
+         n_rho = paste0("rho = ", rho)) %>%
   select(method, n, n_rho, variables, cell) %>%
-  pivot_wider(
-    names_from = c(n, n_rho),
-    values_from = cell
-  )
+  pivot_wider(names_from = c(n, n_rho),
+              values_from = cell)
+
+method_counts <- table(false_table$method)
 
 false_table %>%
-  kable(
-    booktabs = TRUE,
-    caption = "Bias (Coverage) for Noise Variables (X6–X20)",
-    align = "lcccccc"
-  ) %>%
-  add_header_above(c(
-    " " = 2,
-    "n = 250" = 3,
-    "n = 500" = 3
-  )) %>%
+  select(-method) %>%
+  kable(booktabs = TRUE, caption = "Bias (Coverage) for Noise Variables (X6–X20)", align = "lcccccc",
+        col.names = c("Variable", "$\\rho$ = 0", "$\\rho$ = 0.35", "$\\rho$ = 0.70", "$\\rho$ = 0", "$\\rho$ = 0.35", "$\\rho$ = 0.70")) %>%
+  add_header_above(c(" " = 1, "n = 250" = 3, "n = 500" = 3)) %>%
   kable_styling(full_width = FALSE) %>%
   pack_rows(index = table(false_table$method))
- 
- 
 
 ```
 
@@ -187,44 +178,32 @@ false_table %>%
 ```{r, echo = F}
 # Type I and Type II Errors
 error_summary <- all_results %>%
+  mutate(signif = ifelse(is.na(signif), 0, signif)) %>%
   group_by(method, n, rho) %>%
-  summarise(
-    type_I_error = mean(signif[true_non_zero == 0]),
-    type_II_error = 1 - mean(signif[true_non_zero == 1]),
-    .groups = "drop"
-  )
-
-library(ggplot2)
+  summarise(type_I_error  = mean(signif[true_non_zero == 0]),
+            type_II_error = 1 - mean(signif[true_non_zero == 1]),
+            .groups = "drop")
 
 error_long <- error_summary %>%
-  pivot_longer(
-    cols = c(type_I_error, type_II_error),
-    names_to = "error_type",
-    values_to = "rate"
-  )
+  pivot_longer(cols = c(type_I_error, type_II_error),
+               names_to = "error_type",
+               values_to = "rate")
 error_long$method <- factor(error_long$method,
                             levels = c("PVAL","AIC","BIC","LASSO_min","LASSO_1se","ENET_min","ENET_1se"))
 
-ggplot(error_long,
-       aes(x = method, y = rate, fill = error_type)) +
+ggplot(error_long, aes(x = method, y = rate, fill = error_type)) +
   geom_col(position = position_dodge(width = 0.8), width = 0.7) +
   facet_grid(n ~ rho) +
-  labs(
-    title = "Type I and Type II Error Rates",
-    y = "Error Rate",
-    x = "Method",
-    fill = "Error Type"
-  ) +
-  scale_fill_manual(values = c(
-    "type_I_error" = "darkolivegreen2",
-    "type_II_error" = "cornflowerblue"
-  )) +
+  labs(title = "Type I and Type II Error Rates",
+       y = "Error Rate",
+       x = "Method",
+       fill = "Error Type") +
+  scale_fill_manual(values = c("type_I_error" = "darkolivegreen2",
+                               "type_II_error" = "cornflowerblue")) +
   theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    strip.text = element_text(face = "bold"),
-    panel.spacing = unit(1.2, "lines")
-  )
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold"),
+        panel.spacing = unit(1.2, "lines"))
 
 ```
 

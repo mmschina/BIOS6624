@@ -52,28 +52,66 @@ harvest <- function(mod_obj, param, alpha = 0.05) {
 }
 
 
-harvest_glmnet <- function(cv_fit, lambda, param, alpha = 0.05) {
+harvest_glmnet <- function(cv_fit, lambda, param, alpha = 0.05, dat) {
+  
   var_names <- sprintf("V%02d", 1:length(param))
   
   # Extract coefficients at chosen lambda (drop intercept)
   coefs <- coef(cv_fit, s = lambda)
   coefs <- as.matrix(coefs)[-1, , drop = FALSE]
-  
   selected <- which(coefs != 0)
   
-  res_dat <- data.frame(variables = var_names,
-                        true_values = param,
-                        true_non_zero = ifelse(var_names %in% sprintf("V%02d", 1:5), 1, 0),
-                        selected = ifelse(1:length(param) %in% selected, 1, 0),
-                        signif = ifelse(1:length(param) %in% selected, 1, 0),
-                        estimate = coefs[, 1],
-                        LCL = NA,
-                        UCL = NA,
-                        covered = NA)
+  # Refit OLS on selected variables to get CIs and p-values
+  if (length(selected) > 0) {
+    selected_vars <- var_names[selected]
+    refit_formula <- as.formula(paste("y ~", paste(selected_vars, collapse = " + ")))
+    refit_mod <- lm(refit_formula, data = dat)
+    
+    refit_ests <- as.data.frame(summary(refit_mod)$coefficients)
+    refit_ests$param <- rownames(refit_ests)
+    
+    refit_CIs <- as.data.frame(confint.default(refit_mod, level = 1 - alpha))
+    names(refit_CIs) <- c('LCL', 'UCL')
+    refit_CIs$param <- rownames(refit_CIs)
+  }
   
+  res_dat <- data.frame(
+    variables     = var_names,
+    true_values   = param,
+    true_non_zero = ifelse(var_names %in% sprintf("V%02d", 1:5), 1, 0),
+    selected      = ifelse(1:length(param) %in% selected, 1, 0),
+    signif        = NA,
+    estimate      = coefs[, 1],
+    LCL           = NA,
+    UCL           = NA,
+    covered       = NA
+  )
+  
+  # Fill in refit results for selected variables
+  if (length(selected) > 0) {
+    for (v in selected_vars) {
+      idx <- which(res_dat$variables == v)
+      
+      if (v %in% refit_ests$param) {
+        res_dat[idx, 'signif']  <- ifelse(refit_ests[refit_ests$param == v, 4] < alpha, 1, 0)
+        res_dat[idx, 'LCL']     <- refit_CIs[refit_CIs$param == v, 'LCL']
+        res_dat[idx, 'UCL']     <- refit_CIs[refit_CIs$param == v, 'UCL']
+        res_dat[idx, 'covered'] <- ifelse(
+          refit_CIs[refit_CIs$param == v, 'LCL'] <= param[idx] &
+            param[idx] <= refit_CIs[refit_CIs$param == v, 'UCL'], 1, 0
+        )
+      }
+    }
+  }
+  
+  # Coverage for non-selected
   res_dat[res_dat$selected == 0 & res_dat$true_non_zero == 1, 'covered'] <- 0
   res_dat[res_dat$selected == 0 & res_dat$true_non_zero == 0, 'covered'] <- 1
   
+  res_dat <- res_dat[, c('variables', 'true_values', 'true_non_zero',
+                         'selected', 'signif', 'estimate',
+                         'LCL', 'UCL', 'covered')]
+  rownames(res_dat) <- NULL
   return(res_dat)
 }
 
@@ -146,13 +184,13 @@ simfunc <- function(n, rho = 0) {
   
   # lambda.min
   lasso_min_redux <- cv_lasso$glmnet.fit
-  lasso_min_res <- harvest_glmnet(cv_fit = cv_lasso, lambda = cv_lasso$lambda.min, param = param)
+  lasso_min_res <- harvest_glmnet(cv_fit = cv_lasso, lambda = cv_lasso$lambda.min, param = param, dat = data)
   lasso_min_res$method <- 'LASSO_min'
   lasso_min_res$n <- n
   lasso_min_res$rho <- rho
   
   # lambda.1se
-  lasso_1se_res <- harvest_glmnet(cv_fit = cv_lasso, lambda = cv_lasso$lambda.1se, param = param)
+  lasso_1se_res <- lasso_1se_res <- harvest_glmnet(cv_fit = cv_lasso, lambda = cv_lasso$lambda.1se, param = param, dat = data)
   lasso_1se_res$method <- 'LASSO_1se'
   lasso_1se_res$n <- n
   lasso_1se_res$rho <- rho
@@ -163,13 +201,13 @@ simfunc <- function(n, rho = 0) {
   cv_enet <- cv.glmnet(X_mat, Y_vec, alpha = 0.5, nfolds = 10)
   
   # lambda.min
-  enet_min_res <- harvest_glmnet(cv_fit = cv_enet, lambda = cv_enet$lambda.min, param = param)
+  enet_min_res <- enet_min_res  <- harvest_glmnet(cv_fit = cv_enet,  lambda = cv_enet$lambda.min,  param = param, dat = data)
   enet_min_res$method <- 'ENET_min'
   enet_min_res$n <- n
   enet_min_res$rho <- rho
   
   # lambda.1se
-  enet_1se_res <- harvest_glmnet(cv_fit = cv_enet, lambda = cv_enet$lambda.1se, param = param)
+  enet_1se_res <- enet_1se_res  <- harvest_glmnet(cv_fit = cv_enet,  lambda = cv_enet$lambda.1se,  param = param, dat = data)
   enet_1se_res$method <- 'ENET_1se'
   enet_1se_res$n <- n
   enet_1se_res$rho <- rho
