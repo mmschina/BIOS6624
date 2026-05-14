@@ -98,7 +98,7 @@ per_var_tpr <- all_results %>%
          rho_label = paste0("rho = ", rho),
          n_label = paste0("n = ", n))
 
-ggplot(per_var_tpr, aes(x = variables, y = TPR, fill = method)) +
+tpr_plot <- ggplot(per_var_tpr, aes(x = variables, y = TPR, fill = method)) +
   geom_col(position = position_dodge(width = 0.8), width = 0.75) +
   facet_grid(n_label ~ rho_label) +
   labs(title = "True Positive Rate by Variable",
@@ -113,6 +113,9 @@ ggplot(per_var_tpr, aes(x = variables, y = TPR, fill = method)) +
         strip.text = element_text(face = "bold"),
         panel.spacing = unit(1.2, "lines"),
         legend.position = "bottom")
+tpr_plot
+
+ggsave("tpr_plot.png", plot = tpr_plot, width = 10, height = 6, dpi = 300)
 
 ```
 
@@ -191,7 +194,7 @@ error_long <- error_summary %>%
 error_long$method <- factor(error_long$method,
                             levels = c("PVAL","AIC","BIC","LASSO_min","LASSO_1se","ENET_min","ENET_1se"))
 
-ggplot(error_long, aes(x = method, y = rate, fill = error_type)) +
+error_plot <- ggplot(error_long, aes(x = method, y = rate, fill = error_type)) +
   geom_col(position = position_dodge(width = 0.8), width = 0.7) +
   facet_grid(n ~ rho) +
   labs(title = "Type I and Type II Error Rates",
@@ -204,6 +207,9 @@ ggplot(error_long, aes(x = method, y = rate, fill = error_type)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         strip.text = element_text(face = "bold"),
         panel.spacing = unit(1.2, "lines"))
+error_plot
+
+ggsave("error_plot.png", plot = error_plot, width = 10, height = 6, dpi = 300)
 
 ```
 

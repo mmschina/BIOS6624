@@ -75,17 +75,15 @@ harvest_glmnet <- function(cv_fit, lambda, param, alpha = 0.05, dat) {
     refit_CIs$param <- rownames(refit_CIs)
   }
   
-  res_dat <- data.frame(
-    variables     = var_names,
-    true_values   = param,
-    true_non_zero = ifelse(var_names %in% sprintf("V%02d", 1:5), 1, 0),
-    selected      = ifelse(1:length(param) %in% selected, 1, 0),
-    signif        = NA,
-    estimate      = coefs[, 1],
-    LCL           = NA,
-    UCL           = NA,
-    covered       = NA
-  )
+  res_dat <- data.frame(variables = var_names,
+                        true_values = param,
+                        true_non_zero = ifelse(var_names %in% sprintf("V%02d", 1:5), 1, 0),
+                        selected = ifelse(1:length(param) %in% selected, 1, 0),
+                        signif = NA,
+                        estimate = coefs[, 1],
+                        LCL = NA,
+                        UCL = NA,
+                        covered = NA)
   
   # Fill in refit results for selected variables
   if (length(selected) > 0) {
@@ -108,9 +106,7 @@ harvest_glmnet <- function(cv_fit, lambda, param, alpha = 0.05, dat) {
   res_dat[res_dat$selected == 0 & res_dat$true_non_zero == 1, 'covered'] <- 0
   res_dat[res_dat$selected == 0 & res_dat$true_non_zero == 0, 'covered'] <- 1
   
-  res_dat <- res_dat[, c('variables', 'true_values', 'true_non_zero',
-                         'selected', 'signif', 'estimate',
-                         'LCL', 'UCL', 'covered')]
+  res_dat <- res_dat[, c('variables', 'true_values', 'true_non_zero', 'selected', 'signif', 'estimate', 'LCL', 'UCL', 'covered')]
   rownames(res_dat) <- NULL
   return(res_dat)
 }
